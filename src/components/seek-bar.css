@@ -1,0 +1,45 @@
+/* Seek bar: a thin track that fills with the accent colour up to the thumb. */
+input.seek {
+  appearance: none;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+input.seek::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--foreground) var(--fill, 0%),
+    var(--line) var(--fill, 0%)
+  );
+}
+input.seek::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--foreground);
+}
+input.seek::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+input.seek::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--foreground);
+}
+input.seek::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--foreground);
+}
+input.seek:disabled {
+  opacity: 0.4;
+}
