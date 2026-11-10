@@ -106,7 +106,12 @@ class SpikeEngine {
     });
     audio.addEventListener("seeked", () => this.syncPosition());
     // "sound started" is the proof that a track is audible, not just loaded.
-    audio.addEventListener("playing", () => this.log("sound started"));
+    audio.addEventListener("playing", () => {
+      this.log("sound started");
+      // iOS only swaps its 10-second skip buttons for next/previous when the
+      // handlers are registered while audio is actually playing.
+      this.registerMediaSession();
+    });
     audio.addEventListener("stalled", () => this.log("audio stalled"));
     audio.addEventListener("waiting", () => this.log("audio waiting for data"));
     audio.addEventListener("error", () => {
@@ -345,9 +350,15 @@ class SpikeEngine {
   }
 
   private registerMediaSession() {
-    if (!("mediaSession" in navigator)) {
-      this.log("Media Session API is not available");
-      return;
+    if (!("mediaSession" in navigator)) return;
+    // The lock screen has room for one pair of buttons. Clearing the skip
+    // handlers tells iOS to show next/previous track instead.
+    for (const action of ["seekbackward", "seekforward"] as const) {
+      try {
+        navigator.mediaSession.setActionHandler(action, null);
+      } catch {
+        // Not supported here; nothing to clear.
+      }
     }
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
       ["play", () => void (this.audio.paused && this.toggle())],
