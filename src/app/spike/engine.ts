@@ -105,6 +105,8 @@ class SpikeEngine {
       this.syncPosition();
     });
     audio.addEventListener("seeked", () => this.syncPosition());
+    // "sound started" is the proof that a track is audible, not just loaded.
+    audio.addEventListener("playing", () => this.log("sound started"));
     audio.addEventListener("stalled", () => this.log("audio stalled"));
     audio.addEventListener("waiting", () => this.log("audio waiting for data"));
     audio.addEventListener("error", () => {
@@ -164,8 +166,31 @@ class SpikeEngine {
 
   // --- playback -------------------------------------------------------------
 
-  private async resolveUrl(track: SpikeTrack): Promise<string> {
-    if (track.source === "bundled") return track.url!;
+  /**
+   * With `preload`, a network track is downloaded in full and handed back as an
+   * in-memory URL. The first iPhone run showed that a track swapped in while
+   * locked did not start within 3-5 seconds when it still had to be fetched.
+   */
+  private async resolveUrl(
+    track: SpikeTrack,
+    preload = false,
+  ): Promise<string> {
+    if (track.source === "bundled") {
+      if (!preload) return track.url!;
+      try {
+        const started = performance.now();
+        const response = await fetch(track.url!);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        const seconds = ((performance.now() - started) / 1000).toFixed(1);
+        const megabytes = (blob.size / 1e6).toFixed(1);
+        this.log(`preloaded "${track.title}" (${megabytes} MB in ${seconds}s)`);
+        return URL.createObjectURL(blob);
+      } catch (error) {
+        this.log(`preload failed for "${track.title}", will stream: ${error}`);
+        return track.url!;
+      }
+    }
     const dir = await importsDir();
     const handle = await dir.getFileHandle(track.fileName!);
     return URL.createObjectURL(await handle.getFile());
@@ -178,7 +203,13 @@ class SpikeEngine {
     this.audio.src = url;
     this.set({ index, time: 0, duration: 0 });
     this.updateMetadata();
-    this.audio.play().catch((error) => this.log(`play() rejected: ${error}`));
+    this.audio.play().catch((error) =>
+      this.log(
+        error?.name === "AbortError"
+          ? "play interrupted before any sound started"
+          : `play() rejected: ${error}`,
+      ),
+    );
     if (previousBlob && previousBlob !== url) URL.revokeObjectURL(previousBlob);
     void this.prepareNext();
   }
@@ -192,7 +223,7 @@ class SpikeEngine {
       URL.revokeObjectURL(stale.url);
     }
     try {
-      const url = await this.resolveUrl(tracks[nextIndex]);
+      const url = await this.resolveUrl(tracks[nextIndex], true);
       // The queue may have moved on while the file was being opened.
       if ((this.state.index + 1) % this.state.tracks.length !== nextIndex) {
         if (url.startsWith("blob:")) URL.revokeObjectURL(url);
