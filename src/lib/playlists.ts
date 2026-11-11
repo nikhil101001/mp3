@@ -51,6 +51,37 @@ export async function addToPlaylist(
   });
 }
 
+/** Adds several songs to the end, in order, skipping any already present. */
+export async function addManyToPlaylist(
+  playlistId: string,
+  trackIds: string[],
+): Promise<number> {
+  return db.transaction("rw", [db.playlists, db.playlistItems], async () => {
+    const items = await db.playlistItems
+      .where("playlistId")
+      .equals(playlistId)
+      .toArray();
+    const present = new Set(items.map((item) => item.trackId));
+    let position = items.reduce((max, item) => Math.max(max, item.position), -1);
+    const now = Date.now();
+    const fresh: PlaylistItem[] = [];
+    for (const trackId of trackIds) {
+      if (present.has(trackId)) continue;
+      present.add(trackId);
+      fresh.push({
+        id: crypto.randomUUID(),
+        playlistId,
+        trackId,
+        position: ++position,
+        addedAt: now,
+      });
+    }
+    await db.playlistItems.bulkAdd(fresh);
+    await db.playlists.update(playlistId, { updatedAt: now });
+    return fresh.length;
+  });
+}
+
 export async function removeFromPlaylist(itemId: string): Promise<void> {
   await db.playlistItems.delete(itemId);
 }

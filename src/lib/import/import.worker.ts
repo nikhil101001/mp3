@@ -105,13 +105,15 @@ async function copyToStorage(file: File, path: string): Promise<void> {
   }
 }
 
-async function importOne(file: File): Promise<"added" | "skipped"> {
+async function importOne(
+  file: File,
+): Promise<{ status: "added" | "skipped"; trackId: string }> {
   const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
   const existing = await db.renditions
     .where("fingerprint")
     .equals(fingerprint)
-    .count();
-  if (existing > 0) return "skipped";
+    .first();
+  if (existing) return { status: "skipped", trackId: existing.trackId };
 
   const metadata = await parseBlob(file, { duration: true });
   const { common, format } = metadata;
@@ -185,7 +187,7 @@ async function importOne(file: File): Promise<"added" | "skipped"> {
       await db.renditions.put(rendition);
     },
   );
-  return "added";
+  return { status: "added", trackId };
 }
 
 self.onmessage = async (event: MessageEvent<ImportRequest>) => {
@@ -193,16 +195,19 @@ self.onmessage = async (event: MessageEvent<ImportRequest>) => {
   let added = 0;
   let skipped = 0;
   const failed: string[] = [];
+  const trackIds: (string | null)[] = [];
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
     post({ type: "progress", done: index, total: files.length, name: file.name });
     try {
       const result = await importOne(file);
-      if (result === "added") added++;
+      if (result.status === "added") added++;
       else skipped++;
+      trackIds.push(result.trackId);
     } catch (error) {
+      trackIds.push(null);
       failed.push(`${file.name}: ${error instanceof Error ? error.message : error}`);
     }
   }
-  post({ type: "finished", added, skipped, failed });
+  post({ type: "finished", added, skipped, failed, trackIds });
 };

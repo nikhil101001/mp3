@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { importFiles, useImport } from "@/lib/import/client";
 
 const ACCEPT = "audio/*,.mp3,.m4a,.aac,.flac,.wav,.aiff,.ogg,.opus";
@@ -63,7 +64,10 @@ export function ImportStatus() {
   }
   if (!result) return null;
   const parts = [
-    `Added ${result.added}`,
+    result.playlist
+      ? `Playlist “${result.playlist.name}” created with ${result.playlist.count} songs`
+      : `Added ${result.added}`,
+    result.playlist && result.added > 0 ? `${result.added} new` : "",
     result.skipped > 0 ? `${result.skipped} already in library` : "",
     result.failed.length > 0 ? `${result.failed.length} failed` : "",
   ].filter(Boolean);
@@ -77,6 +81,15 @@ export function ImportStatus() {
           </p>
         ))}
       </div>
+      {result.playlist && (
+        <Link
+          href={`/playlist?id=${encodeURIComponent(result.playlist.id)}`}
+          className="relative shrink-0 font-semibold text-accent"
+          onClick={() => useImport.setState({ result: null })}
+        >
+          Open
+        </Link>
+      )}
       <button
         className="relative shrink-0 font-medium text-accent"
         onClick={() => useImport.setState({ result: null })}
