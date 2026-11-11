@@ -3,7 +3,12 @@ export type ImportFilesRequest = { files: File[] };
 
 /** Read a linked folder in place and bring the library in line with it. */
 export type ScanFolderRequest = {
-  folder: { id: string; handle: FileSystemDirectoryHandle };
+  folder: {
+    id: string;
+    handle: FileSystemDirectoryHandle;
+    /** Each newly found song is added here as soon as it has been read. */
+    playlistId: string;
+  };
 };
 
 export type ImportRequest = ImportFilesRequest | ScanFolderRequest;

@@ -128,7 +128,10 @@ async function addSong(
   fingerprint: string,
   placement: Placement,
 ): Promise<string> {
-  const metadata = await parseBlob(file, { duration: true });
+  // Headers only: asking for an exact duration makes the parser read the whole
+  // of some MP3 files. Where the length is missing, the player fills it in the
+  // first time the song plays.
+  const metadata = await parseBlob(file);
   const { common, format } = metadata;
   if (!format.duration && !format.codec) {
     throw new Error("not a readable audio file");
@@ -295,9 +298,30 @@ async function listAudio(
  * changed files are re-read, and songs whose file is gone are removed.
  * Nothing is copied.
  */
+/** Appends one song to the end of a playlist, unless it is already in it. */
+async function appendToPlaylist(playlistId: string, trackId: string) {
+  await db.transaction("rw", [db.playlists, db.playlistItems], async () => {
+    if (!(await db.playlists.get(playlistId))) return;
+    const items = await db.playlistItems
+      .where("playlistId")
+      .equals(playlistId)
+      .toArray();
+    if (items.some((item) => item.trackId === trackId)) return;
+    const last = items.reduce((max, item) => Math.max(max, item.position), -1);
+    await db.playlistItems.add({
+      id: crypto.randomUUID(),
+      playlistId,
+      trackId,
+      position: last + 1,
+      addedAt: Date.now(),
+    });
+  });
+}
+
 async function scanFolder(folder: {
   id: string;
   handle: FileSystemDirectoryHandle;
+  playlistId: string;
 }) {
   const files = (await listAudio(folder.handle)).sort((a, b) =>
     a.path.localeCompare(b.path, undefined, {
@@ -338,6 +362,8 @@ async function scanFolder(folder: {
         folderId: folder.id,
         path,
       });
+      // Show it in the folder's playlist right away, not when the scan ends.
+      await appendToPlaylist(folder.playlistId, trackId);
       trackIds.push(trackId);
       addedIds.push(trackId);
       added++;

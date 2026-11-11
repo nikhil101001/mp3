@@ -70,6 +70,11 @@ function getAudio(): HTMLAudioElement {
     }
     pendingSeek = 0;
     set({ duration: element.duration });
+    const track = get().track;
+    if (track && !track.remote && !track.durationMs && element.duration) {
+      const durationMs = Math.round(element.duration * 1000);
+      void db.tracks.update(track.id, { durationMs });
+    }
     syncPosition();
   });
   element.addEventListener("seeked", syncPosition);

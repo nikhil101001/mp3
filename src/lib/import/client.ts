@@ -21,6 +21,8 @@ type ImportResult = {
 
 type ImportState = {
   running: boolean;
+  /** Set while a linked folder is being read, to word the progress card. */
+  folderName: string | null;
   done: number;
   total: number;
   current: string;
@@ -30,6 +32,7 @@ type ImportState = {
 
 export const useImport = create<ImportState>(() => ({
   running: false,
+  folderName: null,
   done: 0,
   total: 0,
   current: "",
@@ -71,6 +74,7 @@ function runWorker(
 ) {
   useImport.setState({
     running: true,
+    folderName: null,
     done: 0,
     total: "files" in request ? request.files.length : 0,
     current: firstLabel,
@@ -91,13 +95,14 @@ function runWorker(
     }
     worker.terminate();
     void onFinished(message).then((result) =>
-      useImport.setState({ running: false, result }),
+      useImport.setState({ running: false, folderName: null, result }),
     );
   };
   worker.onerror = (event) => {
     worker.terminate();
     useImport.setState({
       running: false,
+      folderName: null,
       result: {
         added: 0,
         skipped: 0,
@@ -153,7 +158,13 @@ export function scanFolder(folderId: string, quiet = false): void {
   void db.folders.get(folderId).then((folder) => {
     if (!folder) return;
     runWorker(
-      { folder: { id: folder.id, handle: folder.handle } },
+      {
+        folder: {
+          id: folder.id,
+          handle: folder.handle,
+          playlistId: folder.playlistId,
+        },
+      },
       `Reading “${folder.name}”`,
       async (message) => {
         await syncFolderPlaylist(folder.id, message.addedIds);
@@ -176,12 +187,23 @@ export function scanFolder(folderId: string, quiet = false): void {
         };
       },
     );
+    useImport.setState({ folderName: folder.name });
   });
 }
 
 /** Picks a folder to link and reads it. Must run from a tap or click. */
 export async function linkFolder(): Promise<void> {
   if (useImport.getState().running) return;
-  const folder = await pickFolder();
-  if (folder) scanFolder(folder.id);
+  try {
+    const folder = await pickFolder();
+    if (folder) scanFolder(folder.id);
+  } catch (error) {
+    useImport.setState({
+      result: {
+        added: 0,
+        skipped: 0,
+        failed: [error instanceof Error ? error.message : String(error)],
+      },
+    });
+  }
 }

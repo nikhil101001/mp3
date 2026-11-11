@@ -43,12 +43,16 @@ export function ImportButton({
 
 /** Progress and result of an import, shown above the player bar. */
 export function ImportStatus() {
-  const { running, done, total, current, result } = useImport();
+  const { running, folderName, done, total, current, result } = useImport();
   if (running) {
     return (
       <div className="glass pointer-events-auto mx-auto w-full max-w-3xl rounded-2xl px-4 py-2.5 text-sm">
         <div className="flex justify-between gap-3">
-          <span className="truncate">Importing {current}</span>
+          <span className="truncate">
+            {folderName
+              ? `Reading “${folderName}” · ${current}`
+              : `Importing ${current}`}
+          </span>
           <span className="shrink-0 text-xs tabular-nums text-white/60">
             {done + 1} / {total}
           </span>
@@ -59,6 +63,12 @@ export function ImportStatus() {
             style={{ width: `${(done / Math.max(total, 1)) * 100}%` }}
           />
         </div>
+        {folderName && (
+          <p className="mt-1.5 text-xs text-white/55">
+            Songs appear as they are read. Nothing is copied; they stay on your
+            computer.
+          </p>
+        )}
       </div>
     );
   }

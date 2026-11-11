@@ -94,10 +94,17 @@ export async function pickFolder(): Promise<LinkedFolder | null> {
   const show = picker();
   if (!show) return null;
   let handle: FileSystemDirectoryHandle;
+  const opened = performance.now();
   try {
     handle = await show({ id: "mp3-music", mode: "read", startIn: "music" });
-  } catch {
-    return null; // Cancelled.
+  } catch (error) {
+    // A cancel takes a person at least a moment. A refusal this fast means the
+    // browser never showed a picker, as in some embedded browsers.
+    const instant = performance.now() - opened < 400;
+    if ((error as DOMException)?.name === "AbortError" && !instant) return null;
+    throw new Error(
+      "This browser couldn’t open a folder picker. Open the app in Chrome or Edge to link a folder.",
+    );
   }
   for (const existing of await db.folders.toArray()) {
     if (await existing.handle.isSameEntry(handle)) return existing;
