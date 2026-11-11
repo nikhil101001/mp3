@@ -115,6 +115,48 @@ export function byAlbumOrder(a: Track, b: Track): number {
   );
 }
 
+/**
+ * Removes songs whose audio file is no longer in app storage, which can
+ * happen if the browser clears stored files. Returns how many were removed.
+ */
+export async function removeSongsWithMissingFiles(): Promise<number> {
+  const dir = await libraryDir();
+  const renditions = await db.renditions.toArray();
+  const missing: typeof renditions = [];
+  for (const rendition of renditions) {
+    try {
+      await dir.getFileHandle(rendition.path);
+    } catch {
+      missing.push(rendition);
+    }
+  }
+  if (missing.length === 0) return 0;
+  const trackIds = missing.map((rendition) => rendition.trackId);
+  await db.transaction(
+    "rw",
+    [db.tracks, db.renditions, db.albums, db.artists, db.playlistItems],
+    async () => {
+      await db.renditions.bulkDelete(missing.map((rendition) => rendition.id));
+      await db.tracks.bulkDelete(trackIds);
+      const gone = new Set(trackIds);
+      const items = await db.playlistItems.toArray();
+      await db.playlistItems.bulkDelete(
+        items.filter((item) => gone.has(item.trackId)).map((item) => item.id),
+      );
+      // Drop albums and artists that no longer have any songs.
+      for (const album of await db.albums.toArray()) {
+        const left = await db.tracks.where("albumId").equals(album.id).count();
+        if (left === 0) await db.albums.delete(album.id);
+      }
+      for (const artist of await db.artists.toArray()) {
+        const left = await db.tracks.where("artistId").equals(artist.id).count();
+        if (left === 0) await db.artists.delete(artist.id);
+      }
+    },
+  );
+  return missing.length;
+}
+
 /** Removes every song, cover and playlist from this device. */
 export async function clearLibrary(): Promise<void> {
   await db.transaction(

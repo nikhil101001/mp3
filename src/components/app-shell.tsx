@@ -9,6 +9,7 @@ import "./motion.css";
 import { Icon, type IconName } from "./icons";
 import { ImportStatus } from "./import-button";
 import { InstallHint } from "./install-hint";
+import { useMiniPlayer } from "./mini-player";
 import { NowPlaying } from "./now-playing";
 import { PlayerBar } from "./player-bar";
 
@@ -38,6 +39,7 @@ const TOP_LEVEL = ["/", "/albums", "/artists", "/playlists"];
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
+  const mini = useMiniPlayer();
   const activeTab = TABS.findIndex((item) => item.match.includes(pathname));
 
   useEffect(() => {
@@ -86,7 +88,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="relative flex flex-col gap-2 px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] md:px-6 md:pb-4">
           <InstallHint />
           <ImportStatus />
-          <PlayerBar onExpand={() => setExpanded(true)} />
+          <PlayerBar
+            onExpand={() => setExpanded(true)}
+            miniPlayer={mini.supported ? mini : undefined}
+          />
           <nav className="glass pointer-events-auto relative mx-auto flex w-full max-w-md rounded-full p-1 md:hidden">
             {/* The highlight slides between tabs instead of jumping. */}
             <span
@@ -115,6 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <NowPlaying open={expanded} onClose={() => setExpanded(false)} />
+      {mini.portal}
     </div>
   );
 }

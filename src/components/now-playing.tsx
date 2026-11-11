@@ -4,14 +4,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRef, useState } from "react";
 import { useArtworkUrl } from "@/lib/artwork";
 import type { Track } from "@/lib/db";
-import {
-  jumpTo,
-  lookupTracks,
-  next,
-  previous,
-  removeFromQueue,
-  usePlayer,
-} from "@/lib/player";
+import { jumpTo, lookupTracks, removeFromQueue, usePlayer } from "@/lib/player";
+import { useTrackSwipe } from "@/lib/use-track-swipe";
 import { Artwork } from "./artwork";
 import { Icon } from "./icons";
 import {
@@ -68,9 +62,6 @@ function Queue() {
   );
 }
 
-const CLOSE_DISTANCE = 110;
-const SKIP_DISTANCE = 70;
-
 /**
  * The full-screen player. Its background is the current cover, heavily
  * blurred, so every song tints the whole screen in its own colours.
@@ -92,9 +83,6 @@ export function NowPlaying({
   const [showQueue, setShowQueue] = useState(false);
 
   const panel = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; y: number; axis: "x" | "y" | null } | null>(
-    null,
-  );
 
   // The panel is moved by writing its style directly, so dragging does not
   // re-render the whole screen on every pixel.
@@ -105,38 +93,11 @@ export function NowPlaying({
     element.style.translate = y === null ? "" : `0 ${Math.max(0, y)}px`;
   }
 
-  const gestures = {
-    onPointerDown(event: React.PointerEvent) {
-      drag.current = { x: event.clientX, y: event.clientY, axis: null };
-      event.currentTarget.setPointerCapture(event.pointerId);
-    },
-    onPointerMove(event: React.PointerEvent) {
-      const from = drag.current;
-      if (!from) return;
-      const dx = event.clientX - from.x;
-      const dy = event.clientY - from.y;
-      if (!from.axis && Math.max(Math.abs(dx), Math.abs(dy)) > 8) {
-        from.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-      }
-      if (from.axis === "y") setOffset(dy);
-    },
-    onPointerUp(event: React.PointerEvent) {
-      const from = drag.current;
-      drag.current = null;
-      if (!from) return;
-      const dx = event.clientX - from.x;
-      const dy = event.clientY - from.y;
-      setOffset(null);
-      if (from.axis === "y" && dy > CLOSE_DISTANCE) onClose();
-      else if (from.axis === "x" && dx < -SKIP_DISTANCE) next();
-      else if (from.axis === "x" && dx > SKIP_DISTANCE) previous();
-    },
-    onPointerCancel() {
-      drag.current = null;
-      setOffset(null);
-    },
-  };
-
+  const {
+    slideRef,
+    handlers: gestures,
+    enterClass,
+  } = useTrackSwipe({ onDown: onClose, followDown: setOffset });
   return (
     <div
       ref={panel}
@@ -185,19 +146,26 @@ export function NowPlaying({
                 className="flex min-h-0 flex-1 touch-none items-center justify-center py-4"
                 {...gestures}
               >
-                {/* Keyed by song so each new cover pops in. */}
+                {/* This wrapper follows the finger on a sideways swipe. Its
+                    child is keyed by song, so each new cover animates in:
+                    from the side after a swipe, with a pop otherwise. */}
                 <div
-                  key={track.id}
-                  className="pop-in flex max-h-full w-full justify-center"
+                  ref={slideRef}
+                  className="flex max-h-full w-full justify-center"
                 >
-                  <Artwork
-                    id={track.artworkId}
-                    size="large"
-                    rounded="rounded-2xl"
-                    className={`motion-safe-only max-h-full w-full max-w-[min(100%,50dvh)] shadow-2xl shadow-black/60 transition-[scale] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-                      playing ? "scale-100" : "scale-[0.82]"
-                    }`}
-                  />
+                  <div
+                    key={track.id}
+                    className={`${enterClass ?? "pop-in"} flex max-h-full w-full justify-center`}
+                  >
+                    <Artwork
+                      id={track.artworkId}
+                      size="large"
+                      rounded="rounded-2xl"
+                      className={`motion-safe-only max-h-full w-full max-w-[min(100%,50dvh)] shadow-2xl shadow-black/60 transition-[scale] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+                        playing ? "scale-100" : "scale-[0.82]"
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -230,7 +198,9 @@ export function NowPlaying({
                 aria-label="Show queue"
                 aria-pressed={showQueue}
                 className={`flex h-11 w-11 items-center justify-center rounded-full transition-[scale,background-color] duration-200 active:scale-90 ${
-                  showQueue ? "bg-accent text-black" : "glass-thin text-white/80"
+                  showQueue
+                    ? "bg-accent text-black"
+                    : "glass-thin text-white/80"
                 }`}
                 onClick={() => setShowQueue((value) => !value)}
               >

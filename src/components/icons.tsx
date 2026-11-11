@@ -57,6 +57,7 @@ const STROKED: Record<string, ReactNode> = {
     </>
   ),
   grip: <path d="M4 9h16M4 15h16" />,
+  pip: <path d="M3 5h18v14H3zM12 12h6v4h-6z" />,
   minus: (
     <>
       <circle cx="12" cy="12" r="9" />
@@ -84,6 +85,7 @@ export type IconName =
   | "playlists"
   | "search"
   | "grip"
+  | "pip"
   | "minus"
   | "close";
 

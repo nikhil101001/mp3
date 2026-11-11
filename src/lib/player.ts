@@ -126,7 +126,14 @@ async function openTrack(trackId: string, preload = false): Promise<Prepared> {
   const rendition = await db.renditions.where("trackId").equals(trackId).first();
   if (!rendition) throw new Error("This song has no playable file.");
   const dir = await libraryDir();
-  const handle = await dir.getFileHandle(rendition.path);
+  let handle: FileSystemFileHandle;
+  try {
+    handle = await dir.getFileHandle(rendition.path);
+  } catch {
+    // The song is listed but its audio is gone, for example because the
+    // browser cleared this app's stored files.
+    throw new Error("This song's file is missing. Import it again.");
+  }
   const [file] = await Promise.all([
     handle.getFile(),
     // Warm the cover so the lock screen can show it without waiting.

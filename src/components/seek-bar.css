@@ -1,48 +1,55 @@
-/* Seek bar: a rounded track with no separate knob. The filled part is the
-   position; it thickens while being dragged. */
-input.seek {
-  appearance: none;
-  height: 24px;
-  background: transparent;
+/* The timeline: a rounded bar with no knob. The tall outer box is the touch
+   target; the bar inside thickens while it is being dragged. */
+.seek {
+  display: flex;
+  align-items: center;
+  height: 28px;
   cursor: pointer;
   touch-action: none;
-  --track: 6px;
+  outline: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
-input.seek:active {
-  --track: 10px;
-}
-input.seek::-webkit-slider-runnable-track {
-  height: var(--track);
-  border-radius: 999px;
-  background: linear-gradient(
-    to right,
-    rgb(255 255 255 / 0.9) var(--fill, 0%),
-    rgb(255 255 255 / 0.22) var(--fill, 0%)
-  );
-  transition: height 0.15s ease;
-}
-input.seek::-webkit-slider-thumb {
-  appearance: none;
-  width: 2px;
-  height: var(--track);
-  background: transparent;
-}
-input.seek::-moz-range-track {
-  height: var(--track);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.22);
-}
-input.seek::-moz-range-progress {
-  height: var(--track);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.9);
-}
-input.seek::-moz-range-thumb {
-  width: 2px;
-  height: var(--track);
-  border: 0;
-  background: transparent;
-}
-input.seek:disabled {
+.seek[aria-disabled="true"] {
   opacity: 0.4;
+  cursor: default;
+}
+
+.seek-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.22);
+  transition:
+    height 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.25s ease-out;
+}
+.seek-fill {
+  height: 100%;
+  background: rgb(255 255 255 / 0.9);
+  /* Playback reports its position about four times a second; gliding between
+     reports makes the bar move smoothly instead of ticking. */
+  transition: width 0.25s linear;
+}
+
+.seek[data-scrubbing="true"] .seek-track {
+  height: 12px;
+  background: rgb(255 255 255 / 0.3);
+}
+/* Under the finger the fill must keep up exactly, so no glide. */
+.seek[data-scrubbing="true"] .seek-fill {
+  background: #fff;
+  transition: none;
+}
+
+.seek:focus-visible .seek-track {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seek-track,
+  .seek-fill {
+    transition: none;
+  }
 }

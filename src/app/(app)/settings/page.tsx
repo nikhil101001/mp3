@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { ImportButton } from "@/components/import-button";
 import { PageHeader } from "@/components/library";
 import { clearArtworkCache } from "@/lib/artwork";
-import { clearLibrary, db } from "@/lib/db";
+import { clearLibrary, db, removeSongsWithMissingFiles } from "@/lib/db";
 import { formatBytes, plural } from "@/lib/format";
 import { useImport } from "@/lib/import/client";
 import { resetPlayer } from "@/lib/player";
@@ -45,6 +45,7 @@ export default function SettingsPage() {
   const importing = useImport((state) => state.running);
   const [storage, setStorage] = useState<Storage | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [checkResult, setCheckResult] = useState<string | null>(null);
 
   // Re-read after each import or removal so the numbers stay current.
   useEffect(() => {
@@ -56,6 +57,16 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [songCount, importing]);
+
+  async function checkLibrary() {
+    setCheckResult("Checking…");
+    const removed = await removeSongsWithMissingFiles();
+    setCheckResult(
+      removed === 0
+        ? "Every song has its file."
+        : `Removed ${plural(removed, "song")} whose file was missing. Import them again to get them back.`,
+    );
+  }
 
   async function removeEverything() {
     resetPlayer();
@@ -100,6 +111,21 @@ export default function SettingsPage() {
               <dd>{storage?.persisted ? "Yes" : "Not yet"}</dd>
             </div>
           </dl>
+        </Section>
+
+        <Section title="Check library">
+          <p className="mb-3 text-sm text-muted">
+            If a song is listed but won’t play, its stored file may have been
+            cleared by the browser. This removes such songs from the list.
+          </p>
+          <button
+            disabled={!songCount || importing}
+            className="min-h-11 rounded-full bg-white/10 px-5 text-sm font-medium disabled:opacity-40"
+            onClick={checkLibrary}
+          >
+            Check for missing files
+          </button>
+          {checkResult && <p className="mt-3 text-sm">{checkResult}</p>}
         </Section>
 
         <Section title="Remove music">

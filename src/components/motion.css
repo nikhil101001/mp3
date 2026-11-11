@@ -39,6 +39,18 @@
     transform: scale(0.92);
   }
 }
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(55%);
+  }
+}
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-55%);
+  }
+}
 @keyframes eq {
   0%,
   100% {
@@ -63,6 +75,13 @@
 }
 .pop-in {
   animation: pop-in 0.45s var(--ease-out) backwards;
+}
+/* The new song arriving from the side the old one did not leave by. */
+.slide-in-right {
+  animation: slide-in-right 0.4s var(--ease-out) backwards;
+}
+.slide-in-left {
+  animation: slide-in-left 0.4s var(--ease-out) backwards;
 }
 
 /* Bars that bounce on the song that is playing. */
@@ -110,6 +129,8 @@
   .sheet-in,
   .rise-in,
   .pop-in,
+  .slide-in-right,
+  .slide-in-left,
   .eq > span {
     animation: none;
   }
