@@ -8,6 +8,11 @@ export type ScanFolderRequest = {
     handle: FileSystemDirectoryHandle;
     /** Each newly found song is added here as soon as it has been read. */
     playlistId: string;
+    /**
+     * True until a scan of this folder has finished once. Songs an earlier,
+     * interrupted scan already read are then added to the playlist too.
+     */
+    firstScan: boolean;
   };
 };
 

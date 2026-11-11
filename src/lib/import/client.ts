@@ -163,6 +163,7 @@ export function scanFolder(folderId: string, quiet = false): void {
           id: folder.id,
           handle: folder.handle,
           playlistId: folder.playlistId,
+          firstScan: !folder.lastScanAt,
         },
       },
       `Reading “${folder.name}”`,

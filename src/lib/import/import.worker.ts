@@ -322,6 +322,7 @@ async function scanFolder(folder: {
   id: string;
   handle: FileSystemDirectoryHandle;
   playlistId: string;
+  firstScan: boolean;
 }) {
   const files = (await listAudio(folder.handle)).sort((a, b) =>
     a.path.localeCompare(b.path, undefined, {
@@ -353,6 +354,11 @@ async function scanFolder(folder: {
       if (existing?.fingerprint === fingerprint) {
         skipped++;
         trackIds.push(existing.trackId);
+        // A first scan that was cut short read this song but never reached
+        // the end, so it may still be missing from the playlist.
+        if (folder.firstScan) {
+          await appendToPlaylist(folder.playlistId, existing.trackId);
+        }
         continue;
       }
       // The file was replaced or re-tagged: read it again from scratch.
