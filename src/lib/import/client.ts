@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { db } from "../db";
-import { pickFolder, syncFolderPlaylist } from "../folders";
+import { mirrorFolderPlaylist, pickFolder } from "../folders";
 import { addManyToPlaylist, createPlaylist } from "../playlists";
 import type { ImportProgress, ImportRequest } from "./types";
 
@@ -163,12 +163,15 @@ export function scanFolder(folderId: string, quiet = false): void {
           id: folder.id,
           handle: folder.handle,
           playlistId: folder.playlistId,
-          firstScan: !folder.lastScanAt,
         },
       },
       `Reading “${folder.name}”`,
       async (message) => {
-        await syncFolderPlaylist(folder.id, message.addedIds);
+        // Songs that failed to read are left out; the rest keep file order.
+        await mirrorFolderPlaylist(
+          folder.id,
+          message.trackIds.filter((id) => id !== null),
+        );
         const current = await db.folders.get(folder.id);
         const playlistId = current?.playlistId ?? folder.playlistId;
         const changed =

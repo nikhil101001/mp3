@@ -2,7 +2,7 @@
 // Needs the browser's folder access, which only desktop Chrome and Edge have.
 
 import { db, removeTracks, type LinkedFolder } from "./db";
-import { addManyToPlaylist, createPlaylist } from "./playlists";
+import { createPlaylist } from "./playlists";
 
 type Permission = "granted" | "denied" | "prompt";
 
@@ -121,29 +121,40 @@ export async function pickFolder(): Promise<LinkedFolder | null> {
   return folder;
 }
 
-/** Appends songs a scan found for the first time to the folder's playlist. */
-export async function syncFolderPlaylist(
+/**
+ * Makes the folder's playlist hold exactly the folder's songs, in file order.
+ * Runs after every scan, so a scan that was cut short, or one run by an older
+ * version of the app, is corrected by the next one.
+ */
+export async function mirrorFolderPlaylist(
   folderId: string,
-  addedIds: string[],
+  orderedTrackIds: string[],
 ): Promise<void> {
   const folder = await db.folders.get(folderId);
   if (!folder) return;
-  if (!(await db.playlists.get(folder.playlistId))) {
-    // The listener deleted the playlist; give the folder a fresh one.
-    const playlist = await createPlaylist(folder.name);
-    await db.folders.update(folderId, { playlistId: playlist.id });
-    const all = await db.renditions
-      .where("folderId")
-      .equals(folderId)
-      .toArray();
-    await addManyToPlaylist(
-      playlist.id,
-      all.map((r) => r.trackId),
-    );
-  } else {
-    await addManyToPlaylist(folder.playlistId, addedIds);
+  let playlistId = folder.playlistId;
+  if (!(await db.playlists.get(playlistId))) {
+    playlistId = (await createPlaylist(folder.name)).id;
   }
-  await db.folders.update(folderId, { lastScanAt: Date.now() });
+  const now = Date.now();
+  await db.transaction(
+    "rw",
+    [db.folders, db.playlists, db.playlistItems],
+    async () => {
+      await db.playlistItems.where("playlistId").equals(playlistId).delete();
+      await db.playlistItems.bulkAdd(
+        [...new Set(orderedTrackIds)].map((trackId, position) => ({
+          id: crypto.randomUUID(),
+          playlistId,
+          trackId,
+          position,
+          addedAt: now,
+        })),
+      );
+      await db.playlists.update(playlistId, { updatedAt: now });
+      await db.folders.update(folderId, { playlistId, lastScanAt: now });
+    },
+  );
 }
 
 /**

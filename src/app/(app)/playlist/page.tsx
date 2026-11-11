@@ -26,6 +26,12 @@ import { Icon } from "@/components/icons";
 import { PlayActions } from "@/components/library";
 import { TrackList } from "@/components/track-list";
 import { db } from "@/lib/db";
+import {
+  folderPermission,
+  requestFolderPermission,
+  unlinkFolder,
+} from "@/lib/folders";
+import { scanFolder, useImport } from "@/lib/import/client";
 import { formatTime, plural } from "@/lib/format";
 import {
   deletePlaylist,
@@ -156,7 +162,10 @@ function PlaylistView() {
     [id],
   );
   const [editing, setEditing] = useState(false);
-  const [sheet, setSheet] = useState<"menu" | "rename" | "delete" | null>(null);
+  const [sheet, setSheet] = useState<
+    "menu" | "rename" | "delete" | "unlink" | null
+  >(null);
+  const importing = useImport((state) => state.running);
 
   if (!data) return null;
   const { playlist, entries, linked } = data;
@@ -168,7 +177,34 @@ function PlaylistView() {
     tracks.reduce((sum, track) => sum + track.durationMs, 0) / 1000;
   const cover = tracks.find((track) => track.artworkId)?.artworkId;
 
-  const toolbar = (
+  // A linked folder's playlist mirrors the folder, so it is changed by
+  // changing the folder and rescanning, not by editing it here.
+  async function rescanLinked() {
+    if (!linked) return;
+    const allowed =
+      (await folderPermission(linked)) === "granted" ||
+      (await requestFolderPermission(linked));
+    if (allowed) scanFolder(linked.id);
+  }
+
+  const toolbar = linked ? (
+    <div className="flex justify-end gap-2 px-4 pt-3 md:px-6">
+      <button
+        className={pill}
+        disabled={importing}
+        onClick={() => void rescanLinked()}
+      >
+        Rescan folder
+      </button>
+      <button
+        aria-label="Folder options"
+        className={`${pillBase} w-9`}
+        onClick={() => setSheet("unlink")}
+      >
+        <Icon name="more" size={18} />
+      </button>
+    </div>
+  ) : (
     <div className="flex justify-end gap-2 px-4 pt-3 md:px-6">
       {entries.length > 0 && (
         <button className={pill} onClick={() => setEditing((value) => !value)}>
@@ -189,6 +225,23 @@ function PlaylistView() {
 
   const sheets = (
     <>
+      {sheet === "unlink" && linked && (
+        <ActionSheet
+          title={`Unlink “${linked.name}”?`}
+          subtitle="Its songs and this playlist leave the app. The files on your computer are not touched."
+          onClose={() => setSheet(null)}
+          actions={[
+            {
+              label: "Unlink folder",
+              destructive: true,
+              onSelect: async () => {
+                await unlinkFolder(linked.id);
+                router.replace("/playlists");
+              },
+            },
+          ]}
+        />
+      )}
       {sheet === "menu" && (
         <ActionSheet
           title={playlist.name}
@@ -254,16 +307,20 @@ function PlaylistView() {
     <>
       <TrackList
         tracks={tracks}
-        extraActions={(track) => [
-          {
-            label: "Remove from playlist",
-            destructive: true,
-            onSelect: () => {
-              const entry = entries.find((e) => e.track.id === track.id);
-              if (entry) void removeFromPlaylist(entry.item.id);
-            },
-          },
-        ]}
+        extraActions={(track) =>
+          linked
+            ? []
+            : [
+                {
+                  label: "Remove from playlist",
+                  destructive: true,
+                  onSelect: () => {
+                    const entry = entries.find((e) => e.track.id === track.id);
+                    if (entry) void removeFromPlaylist(entry.item.id);
+                  },
+                },
+              ]
+        }
         header={
           <div>
             {toolbar}
@@ -279,8 +336,8 @@ function PlaylistView() {
                   {playlist.name}
                 </h1>
                 <p className="mt-1 text-sm text-muted">
-                  {linked ? "Linked folder" : "Playlist"} ·{" "}
-                  {plural(tracks.length, "song")}
+                  {linked ? "Linked folder, matches its contents" : "Playlist"}{" "}
+                  · {plural(tracks.length, "song")}
                   {tracks.length > 0 ? ` · ${formatTime(seconds)}` : ""}
                 </p>
                 <div className="mx-auto mt-4 grid w-full max-w-md grid-cols-2 gap-3 md:mx-0">
