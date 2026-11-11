@@ -28,10 +28,16 @@ export interface Track {
 export interface Rendition {
   id: string;
   trackId: string;
-  source: "imported";
-  /** File name inside the OPFS "library" folder. */
+  /** "imported": copied into app storage. "linked": read from a folder on disk. */
+  source: "imported" | "linked";
+  /**
+   * Imported: file name inside the OPFS "library" folder.
+   * Linked: path inside the linked folder, such as "Disc 1/01 Intro.flac".
+   */
   path: string;
-  /** name:size:modified of the original file, to skip re-imports. */
+  /** For linked songs, the folder they are read from. */
+  folderId?: string;
+  /** Identifies the original file, to skip work when it has not changed. */
   fingerprint: string;
   codec: string;
   sampleRate?: number;
@@ -79,6 +85,21 @@ export interface PlaylistItem {
   addedAt: number;
 }
 
+/**
+ * A folder on disk whose songs are played in place, not copied. Only browsers
+ * with folder access (desktop Chrome and Edge) can create these.
+ */
+export interface LinkedFolder {
+  id: string;
+  name: string;
+  /** The browser's reference to the folder. It survives restarts. */
+  handle: FileSystemDirectoryHandle;
+  /** The playlist that mirrors this folder. */
+  playlistId: string;
+  addedAt: number;
+  lastScanAt?: number;
+}
+
 export const db = new Dexie("mp3") as Dexie & {
   tracks: EntityTable<Track, "id">;
   renditions: EntityTable<Rendition, "id">;
@@ -87,6 +108,7 @@ export const db = new Dexie("mp3") as Dexie & {
   artwork: EntityTable<Artwork, "id">;
   playlists: EntityTable<Playlist, "id">;
   playlistItems: EntityTable<PlaylistItem, "id">;
+  folders: EntityTable<LinkedFolder, "id">;
 };
 
 db.version(1).stores({
@@ -97,6 +119,12 @@ db.version(1).stores({
   artwork: "id",
   playlists: "id, name",
   playlistItems: "id, playlistId, [playlistId+position]",
+});
+
+// Version 2 adds linked folders.
+db.version(2).stores({
+  renditions: "id, trackId, &fingerprint, folderId",
+  folders: "id, playlistId",
 });
 
 export const LIBRARY_DIR = "library";
@@ -116,34 +144,26 @@ export function byAlbumOrder(a: Track, b: Track): number {
 }
 
 /**
- * Removes songs whose audio file is no longer in app storage, which can
- * happen if the browser clears stored files. Returns how many were removed.
+ * Removes songs from the library along with their files' records and playlist
+ * entries, then drops any album or artist left with no songs.
  */
-export async function removeSongsWithMissingFiles(): Promise<number> {
-  const dir = await libraryDir();
-  const renditions = await db.renditions.toArray();
-  const missing: typeof renditions = [];
-  for (const rendition of renditions) {
-    try {
-      await dir.getFileHandle(rendition.path);
-    } catch {
-      missing.push(rendition);
-    }
-  }
-  if (missing.length === 0) return 0;
-  const trackIds = missing.map((rendition) => rendition.trackId);
+export async function removeTracks(trackIds: string[]): Promise<void> {
+  if (trackIds.length === 0) return;
   await db.transaction(
     "rw",
     [db.tracks, db.renditions, db.albums, db.artists, db.playlistItems],
     async () => {
-      await db.renditions.bulkDelete(missing.map((rendition) => rendition.id));
-      await db.tracks.bulkDelete(trackIds);
       const gone = new Set(trackIds);
+      const renditions = await db.renditions
+        .where("trackId")
+        .anyOf(trackIds)
+        .primaryKeys();
+      await db.renditions.bulkDelete(renditions);
+      await db.tracks.bulkDelete(trackIds);
       const items = await db.playlistItems.toArray();
       await db.playlistItems.bulkDelete(
         items.filter((item) => gone.has(item.trackId)).map((item) => item.id),
       );
-      // Drop albums and artists that no longer have any songs.
       for (const album of await db.albums.toArray()) {
         const left = await db.tracks.where("albumId").equals(album.id).count();
         if (left === 0) await db.albums.delete(album.id);
@@ -154,6 +174,26 @@ export async function removeSongsWithMissingFiles(): Promise<number> {
       }
     },
   );
+}
+
+/**
+ * Removes imported songs whose audio file is no longer in app storage, which
+ * can happen if the browser clears stored files. Returns how many were removed.
+ * Linked songs are left alone: their files live on disk, not in app storage.
+ */
+export async function removeSongsWithMissingFiles(): Promise<number> {
+  const dir = await libraryDir();
+  const renditions = await db.renditions.toArray();
+  const missing: string[] = [];
+  for (const rendition of renditions) {
+    if (rendition.source !== "imported") continue;
+    try {
+      await dir.getFileHandle(rendition.path);
+    } catch {
+      missing.push(rendition.trackId);
+    }
+  }
+  await removeTracks(missing);
   return missing.length;
 }
 
@@ -169,6 +209,7 @@ export async function clearLibrary(): Promise<void> {
       db.artwork,
       db.playlists,
       db.playlistItems,
+      db.folders,
     ],
     async () => {
       await Promise.all([
@@ -179,6 +220,7 @@ export async function clearLibrary(): Promise<void> {
         db.artwork.clear(),
         db.playlists.clear(),
         db.playlistItems.clear(),
+        db.folders.clear(),
       ]);
     },
   );

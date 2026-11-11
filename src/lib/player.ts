@@ -10,6 +10,7 @@ import { create } from "zustand";
 import { loadArtworkUrl, peekArtworkUrl } from "./artwork";
 import { audiusStreamUrl } from "./audius";
 import { db, libraryDir, type Track } from "./db";
+import { openLinkedFile } from "./folders";
 
 export type RepeatMode = "off" | "all" | "one";
 
@@ -97,7 +98,9 @@ export function registerTracks(tracks: Track[]) {
 }
 
 /** Looks tracks up in the library or among the streamed ones in the queue. */
-export async function lookupTracks(ids: string[]): Promise<(Track | undefined)[]> {
+export async function lookupTracks(
+  ids: string[],
+): Promise<(Track | undefined)[]> {
   const stored = await db.tracks.bulkGet(ids);
   return ids.map((id, index) => stored[index] ?? transient.get(id));
 }
@@ -123,19 +126,30 @@ async function openTrack(trackId: string, preload = false): Promise<Prepared> {
   const [track] = await lookupTracks([trackId]);
   if (!track) throw new Error("This song is no longer in the library.");
   if (track.remote) return openRemote(track, preload);
-  const rendition = await db.renditions.where("trackId").equals(trackId).first();
+  const rendition = await db.renditions
+    .where("trackId")
+    .equals(trackId)
+    .first();
   if (!rendition) throw new Error("This song has no playable file.");
-  const dir = await libraryDir();
-  let handle: FileSystemFileHandle;
-  try {
-    handle = await dir.getFileHandle(rendition.path);
-  } catch {
-    // The song is listed but its audio is gone, for example because the
-    // browser cleared this app's stored files.
-    throw new Error("This song's file is missing. Import it again.");
+  let open: Promise<File>;
+  if (rendition.source === "linked") {
+    // Read in place from the folder on disk. When this follows a tap, the
+    // browser may show its "allow access" prompt here.
+    open = openLinkedFile(rendition.folderId!, rendition.path);
+  } else {
+    const dir = await libraryDir();
+    let handle: FileSystemFileHandle;
+    try {
+      handle = await dir.getFileHandle(rendition.path);
+    } catch {
+      // The song is listed but its audio is gone, for example because the
+      // browser cleared this app's stored files.
+      throw new Error("This song's file is missing. Import it again.");
+    }
+    open = handle.getFile();
   }
   const [file] = await Promise.all([
-    handle.getFile(),
+    open,
     // Warm the cover so the lock screen can show it without waiting.
     loadArtworkUrl(track.artworkId, "large"),
   ]);
@@ -208,7 +222,8 @@ async function loadAndPlay(index: number, at = 0) {
     set({
       index,
       playing: false,
-      error: error instanceof Error ? error.message : "Could not open this song.",
+      error:
+        error instanceof Error ? error.message : "Could not open this song.",
     });
   }
 }
@@ -428,7 +443,9 @@ export async function restorePlayer() {
   if (restored) return;
   restored = true;
   try {
-    const saved = JSON.parse(localStorage.getItem(SAVED_KEY) ?? "null") as Saved | null;
+    const saved = JSON.parse(
+      localStorage.getItem(SAVED_KEY) ?? "null",
+    ) as Saved | null;
     registerTracks(saved?.streamed ?? []);
     const trackId = saved?.queue?.[saved.index];
     const [track] = trackId ? await lookupTracks([trackId]) : [];
@@ -517,7 +534,13 @@ function registerMediaSession() {
     // Cleared on purpose: with these set, iOS hides next/previous.
     ["seekbackward", null],
     ["seekforward", null],
-    ["play", () => void getAudio().play().catch(() => {})],
+    [
+      "play",
+      () =>
+        void getAudio()
+          .play()
+          .catch(() => {}),
+    ],
     ["pause", () => getAudio().pause()],
     ["nexttrack", next],
     ["previoustrack", previous],

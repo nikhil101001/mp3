@@ -63,18 +63,25 @@ export function ImportStatus() {
     );
   }
   if (!result) return null;
-  const parts = [
-    result.playlist
-      ? `Playlist “${result.playlist.name}” created with ${result.playlist.count} songs`
-      : `Added ${result.added}`,
-    result.playlist && result.added > 0 ? `${result.added} new` : "",
-    result.skipped > 0 ? `${result.skipped} already in library` : "",
-    result.failed.length > 0 ? `${result.failed.length} failed` : "",
-  ].filter(Boolean);
+  const parts = result.folder
+    ? [
+        `“${result.playlist?.name}” is up to date: ${result.playlist?.count ?? 0} songs`,
+        result.added > 0 ? `${result.added} new` : "",
+        result.removed ? `${result.removed} no longer in the folder` : "",
+      ]
+    : [
+        result.playlist
+          ? `Playlist “${result.playlist.name}” created with ${result.playlist.count} songs`
+          : `Added ${result.added}`,
+        result.playlist && result.added > 0 ? `${result.added} new` : "",
+        result.skipped > 0 ? `${result.skipped} already in library` : "",
+      ];
+  if (result.failed.length > 0) parts.push(`${result.failed.length} failed`);
+  const summary = parts.filter(Boolean);
   return (
     <div className="glass pointer-events-auto mx-auto flex w-full max-w-3xl items-start justify-between gap-3 rounded-2xl px-4 py-2.5 text-sm">
       <div className="min-w-0">
-        <p>{parts.join(" · ")}</p>
+        <p>{summary.join(" · ")}</p>
         {result.failed.slice(0, 3).map((line) => (
           <p key={line} className="truncate text-xs text-bad">
             {line}

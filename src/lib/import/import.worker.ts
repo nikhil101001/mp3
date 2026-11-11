@@ -4,7 +4,13 @@
 // Safari only allows synchronous OPFS writes in a worker.
 
 import { parseBlob, selectCover } from "music-metadata";
-import { db, libraryDir, type Rendition, type Track } from "../db";
+import {
+  db,
+  libraryDir,
+  removeTracks,
+  type Rendition,
+  type Track,
+} from "../db";
 import type { ImportProgress, ImportRequest } from "./types";
 
 type SyncAccessHandle = {
@@ -105,16 +111,23 @@ async function copyToStorage(file: File, path: string): Promise<void> {
   }
 }
 
-async function importOne(
-  file: File,
-): Promise<{ status: "added" | "skipped"; trackId: string }> {
-  const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
-  const existing = await db.renditions
-    .where("fingerprint")
-    .equals(fingerprint)
-    .first();
-  if (existing) return { status: "skipped", trackId: existing.trackId };
+const AUDIO_FILE =
+  /\.(mp3|m4a|aac|flac|wav|aif|aiff|ogg|oga|opus|mp4|m4b|wma|caf)$/i;
 
+/** Where a new song's audio lives. */
+type Placement =
+  { source: "imported" } | { source: "linked"; folderId: string; path: string };
+
+/**
+ * Reads a file's tags and cover and adds it to the library. Imported files
+ * are copied into app storage; linked files are only described, and stay
+ * where they are on disk.
+ */
+async function addSong(
+  file: File,
+  fingerprint: string,
+  placement: Placement,
+): Promise<string> {
   const metadata = await parseBlob(file, { duration: true });
   const { common, format } = metadata;
   if (!format.duration && !format.codec) {
@@ -130,8 +143,13 @@ async function importOne(
   const artworkId = await saveArtwork(selectCover(common.picture));
 
   const trackId = crypto.randomUUID();
-  const path = `${trackId}.${extension(file.name)}`;
-  await copyToStorage(file, path);
+  let path: string;
+  if (placement.source === "imported") {
+    path = `${trackId}.${extension(file.name)}`;
+    await copyToStorage(file, path);
+  } else {
+    path = placement.path;
+  }
 
   const track: Track = {
     id: trackId,
@@ -153,8 +171,9 @@ async function importOne(
   const rendition: Rendition = {
     id: crypto.randomUUID(),
     trackId,
-    source: "imported",
+    source: placement.source,
     path,
+    folderId: placement.source === "linked" ? placement.folderId : undefined,
     fingerprint,
     codec,
     sampleRate: format.sampleRate,
@@ -187,27 +206,176 @@ async function importOne(
       await db.renditions.put(rendition);
     },
   );
-  return { status: "added", trackId };
+  return trackId;
 }
 
-self.onmessage = async (event: MessageEvent<ImportRequest>) => {
-  const { files } = event.data;
+async function importFiles(files: File[]) {
   let added = 0;
   let skipped = 0;
   const failed: string[] = [];
   const trackIds: (string | null)[] = [];
+  const addedIds: string[] = [];
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
-    post({ type: "progress", done: index, total: files.length, name: file.name });
+    post({
+      type: "progress",
+      done: index,
+      total: files.length,
+      name: file.name,
+    });
     try {
-      const result = await importOne(file);
-      if (result.status === "added") added++;
-      else skipped++;
-      trackIds.push(result.trackId);
+      const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
+      const existing = await db.renditions
+        .where("fingerprint")
+        .equals(fingerprint)
+        .first();
+      if (existing) {
+        skipped++;
+        trackIds.push(existing.trackId);
+      } else {
+        const trackId = await addSong(file, fingerprint, {
+          source: "imported",
+        });
+        trackIds.push(trackId);
+        addedIds.push(trackId);
+        added++;
+      }
     } catch (error) {
       trackIds.push(null);
-      failed.push(`${file.name}: ${error instanceof Error ? error.message : error}`);
+      failed.push(
+        `${file.name}: ${error instanceof Error ? error.message : error}`,
+      );
     }
   }
-  post({ type: "finished", added, skipped, failed, trackIds });
+  post({
+    type: "finished",
+    added,
+    skipped,
+    removed: 0,
+    failed,
+    trackIds,
+    addedIds,
+  });
+}
+
+type FoundFile = { path: string; handle: FileSystemFileHandle };
+
+/** Lists every audio file under a folder, including sub-folders. */
+async function listAudio(
+  dir: FileSystemDirectoryHandle,
+  prefix = "",
+): Promise<FoundFile[]> {
+  const found: FoundFile[] = [];
+  const entries = (
+    dir as unknown as {
+      entries(): AsyncIterable<[string, FileSystemHandle]>;
+    }
+  ).entries();
+  for await (const [name, handle] of entries) {
+    if (name.startsWith(".")) continue;
+    if (handle.kind === "directory") {
+      found.push(
+        ...(await listAudio(
+          handle as FileSystemDirectoryHandle,
+          `${prefix}${name}/`,
+        )),
+      );
+    } else if (AUDIO_FILE.test(name)) {
+      found.push({
+        path: `${prefix}${name}`,
+        handle: handle as FileSystemFileHandle,
+      });
+    }
+  }
+  return found;
+}
+
+/**
+ * Brings the library in line with a linked folder: new files are added,
+ * changed files are re-read, and songs whose file is gone are removed.
+ * Nothing is copied.
+ */
+async function scanFolder(folder: {
+  id: string;
+  handle: FileSystemDirectoryHandle;
+}) {
+  const files = (await listAudio(folder.handle)).sort((a, b) =>
+    a.path.localeCompare(b.path, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+  const known = new Map(
+    (await db.renditions.where("folderId").equals(folder.id).toArray()).map(
+      (rendition) => [rendition.path, rendition],
+    ),
+  );
+
+  let added = 0;
+  let skipped = 0;
+  const failed: string[] = [];
+  const trackIds: (string | null)[] = [];
+  const addedIds: string[] = [];
+  const stale: string[] = [];
+
+  for (let index = 0; index < files.length; index++) {
+    const { path, handle } = files[index];
+    post({ type: "progress", done: index, total: files.length, name: path });
+    try {
+      const file = await handle.getFile();
+      const fingerprint = `linked:${folder.id}:${path}:${file.size}:${file.lastModified}`;
+      const existing = known.get(path);
+      known.delete(path);
+      if (existing?.fingerprint === fingerprint) {
+        skipped++;
+        trackIds.push(existing.trackId);
+        continue;
+      }
+      // The file was replaced or re-tagged: read it again from scratch.
+      if (existing) await removeTracks([existing.trackId]);
+      const trackId = await addSong(file, fingerprint, {
+        source: "linked",
+        folderId: folder.id,
+        path,
+      });
+      trackIds.push(trackId);
+      addedIds.push(trackId);
+      added++;
+    } catch (error) {
+      trackIds.push(null);
+      failed.push(`${path}: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  // Whatever is still in `known` was not found on disk this time.
+  for (const rendition of known.values()) stale.push(rendition.trackId);
+  await removeTracks(stale);
+
+  post({
+    type: "finished",
+    added,
+    skipped,
+    removed: stale.length,
+    failed,
+    trackIds,
+    addedIds,
+  });
+}
+
+self.onmessage = async (event: MessageEvent<ImportRequest>) => {
+  const request = event.data;
+  try {
+    if ("folder" in request) await scanFolder(request.folder);
+    else await importFiles(request.files);
+  } catch (error) {
+    post({
+      type: "finished",
+      added: 0,
+      skipped: 0,
+      removed: 0,
+      failed: [error instanceof Error ? error.message : String(error)],
+      trackIds: [],
+      addedIds: [],
+    });
+  }
 };

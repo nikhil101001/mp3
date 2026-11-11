@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ImportButton } from "@/components/import-button";
+import { LinkedFoldersSection } from "@/components/linked-folders";
 import { PageHeader } from "@/components/library";
 import { clearArtworkCache } from "@/lib/artwork";
 import { clearLibrary, db, removeSongsWithMissingFiles } from "@/lib/db";
@@ -29,7 +30,13 @@ async function readStorage(): Promise<Storage | null> {
   }
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="card rounded-2xl p-4">
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
@@ -91,6 +98,8 @@ export default function SettingsPage() {
             </span>
           </div>
         </Section>
+
+        <LinkedFoldersSection />
 
         <Section title="Storage">
           <dl className="space-y-1.5 text-sm">

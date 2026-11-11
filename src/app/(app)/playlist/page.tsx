@@ -41,14 +41,22 @@ const pillBase =
 const pill = `${pillBase} px-4`;
 
 function SortableRow({ entry }: { entry: PlaylistEntry }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: entry.item.id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: entry.item.id });
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`relative flex h-[58px] items-center gap-3 pl-3 pr-1 md:pl-5 ${
-        isDragging ? "z-10 rounded-xl bg-white/10 shadow-xl shadow-black/50" : ""
+        isDragging
+          ? "z-10 rounded-xl bg-white/10 shadow-xl shadow-black/50"
+          : ""
       }`}
     >
       <button
@@ -95,7 +103,9 @@ function EditList({
   const [pendingOrder, setPendingOrder] = useState<string[] | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const byId = new Map(entries.map((entry) => [entry.item.id, entry]));
@@ -141,6 +151,7 @@ function PlaylistView() {
     async () => ({
       playlist: await db.playlists.get(id),
       entries: await playlistEntries(id),
+      linked: await db.folders.where("playlistId").equals(id).first(),
     }),
     [id],
   );
@@ -148,12 +159,13 @@ function PlaylistView() {
   const [sheet, setSheet] = useState<"menu" | "rename" | "delete" | null>(null);
 
   if (!data) return null;
-  const { playlist, entries } = data;
+  const { playlist, entries, linked } = data;
   if (!playlist) {
     return <p className="p-6 text-muted">This playlist no longer exists.</p>;
   }
   const tracks = entries.map((entry) => entry.track);
-  const seconds = tracks.reduce((sum, track) => sum + track.durationMs, 0) / 1000;
+  const seconds =
+    tracks.reduce((sum, track) => sum + track.durationMs, 0) / 1000;
   const cover = tracks.find((track) => track.artworkId)?.artworkId;
 
   const toolbar = (
@@ -182,7 +194,11 @@ function PlaylistView() {
           title={playlist.name}
           onClose={() => setSheet(null)}
           actions={[
-            { label: "Rename", keepOpen: true, onSelect: () => setSheet("rename") },
+            {
+              label: "Rename",
+              keepOpen: true,
+              onSelect: () => setSheet("rename"),
+            },
             {
               label: "Delete playlist",
               destructive: true,
@@ -263,7 +279,8 @@ function PlaylistView() {
                   {playlist.name}
                 </h1>
                 <p className="mt-1 text-sm text-muted">
-                  Playlist · {plural(tracks.length, "song")}
+                  {linked ? "Linked folder" : "Playlist"} ·{" "}
+                  {plural(tracks.length, "song")}
                   {tracks.length > 0 ? ` · ${formatTime(seconds)}` : ""}
                 </p>
                 <div className="mx-auto mt-4 grid w-full max-w-md grid-cols-2 gap-3 md:mx-0">

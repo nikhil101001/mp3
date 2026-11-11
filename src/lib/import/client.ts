@@ -1,23 +1,31 @@
 import { create } from "zustand";
+import { db } from "../db";
+import { pickFolder, syncFolderPlaylist } from "../folders";
 import { addManyToPlaylist, createPlaylist } from "../playlists";
-import type { ImportProgress } from "./types";
+import type { ImportProgress, ImportRequest } from "./types";
 
 const AUDIO_FILE =
   /\.(mp3|m4a|aac|flac|wav|aif|aiff|ogg|oga|opus|mp4|m4b|wma|caf)$/i;
+
+type ImportResult = {
+  added: number;
+  skipped: number;
+  failed: string[];
+  /** Folder scans only: songs whose file was gone from the folder. */
+  removed?: number;
+  /** Set when the run made or updated a playlist. */
+  playlist?: { id: string; name: string; count: number };
+  /** Set for folder scans, to word the result as an update. */
+  folder?: boolean;
+};
 
 type ImportState = {
   running: boolean;
   done: number;
   total: number;
   current: string;
-  /** Result of the last finished import, shown until the next one starts. */
-  result: {
-    added: number;
-    skipped: number;
-    failed: string[];
-    /** Set when the import also made a playlist. */
-    playlist?: { id: string; name: string; count: number };
-  } | null;
+  /** Result of the last finished run, shown until the next one starts. */
+  result: ImportResult | null;
 };
 
 export const useImport = create<ImportState>(() => ({
@@ -53,6 +61,53 @@ export function folderNameOf(files: File[]): string | undefined {
   return first ? first.split("/")[0] : undefined;
 }
 
+type Finished = Extract<ImportProgress, { type: "finished" }>;
+
+/** Runs the import worker, shows its progress, and hands over the result. */
+function runWorker(
+  request: ImportRequest,
+  firstLabel: string,
+  onFinished: (message: Finished) => Promise<ImportResult | null>,
+) {
+  useImport.setState({
+    running: true,
+    done: 0,
+    total: "files" in request ? request.files.length : 0,
+    current: firstLabel,
+    result: null,
+  });
+  const worker = new Worker(new URL("./import.worker.ts", import.meta.url), {
+    type: "module",
+  });
+  worker.onmessage = (event: MessageEvent<ImportProgress>) => {
+    const message = event.data;
+    if (message.type === "progress") {
+      useImport.setState({
+        done: message.done,
+        total: message.total,
+        current: message.name,
+      });
+      return;
+    }
+    worker.terminate();
+    void onFinished(message).then((result) =>
+      useImport.setState({ running: false, result }),
+    );
+  };
+  worker.onerror = (event) => {
+    worker.terminate();
+    useImport.setState({
+      running: false,
+      result: {
+        added: 0,
+        skipped: 0,
+        failed: [event.message || "Import failed."],
+      },
+    });
+  };
+  worker.postMessage(request);
+}
+
 /**
  * Copies the picked audio files into the library. Other files are ignored.
  * With `playlistName`, the songs also become a playlist of that name, in
@@ -67,64 +122,66 @@ export function importFiles(picked: File[], playlistName?: string): void {
     });
     return;
   }
-
   // Ask the browser not to evict the library when the device runs low on space.
   void navigator.storage?.persist?.();
 
-  useImport.setState({
-    running: true,
-    done: 0,
-    total: files.length,
-    current: files[0].name,
-    result: null,
+  runWorker({ files }, files[0].name, async (message) => {
+    const result: ImportResult = {
+      added: message.added,
+      skipped: message.skipped,
+      failed: message.failed,
+    };
+    const trackIds = message.trackIds.filter((id) => id !== null);
+    if (!playlistName || trackIds.length === 0) return result;
+    const playlist = await createPlaylist(playlistName);
+    const count = await addManyToPlaylist(playlist.id, trackIds);
+    return {
+      ...result,
+      playlist: { id: playlist.id, name: playlist.name, count },
+    };
   });
+}
 
-  const worker = new Worker(new URL("./import.worker.ts", import.meta.url), {
-    type: "module",
-  });
-  worker.onmessage = (event: MessageEvent<ImportProgress>) => {
-    const message = event.data;
-    if (message.type === "progress") {
-      useImport.setState({
-        done: message.done,
-        total: message.total,
-        current: message.name,
-      });
-    } else {
-      worker.terminate();
-      const result = {
-        added: message.added,
-        skipped: message.skipped,
-        failed: message.failed,
-      };
-      const trackIds = message.trackIds.filter((id) => id !== null);
-      if (!playlistName || trackIds.length === 0) {
-        useImport.setState({ running: false, result });
-        return;
-      }
-      void (async () => {
-        const playlist = await createPlaylist(playlistName);
-        const count = await addManyToPlaylist(playlist.id, trackIds);
-        useImport.setState({
-          running: false,
-          result: {
-            ...result,
-            playlist: { id: playlist.id, name: playlist.name, count },
-          },
-        });
-      })();
-    }
-  };
-  worker.onerror = (event) => {
-    useImport.setState({
-      running: false,
-      result: {
-        added: 0,
-        skipped: 0,
-        failed: [event.message || "Import failed."],
+/**
+ * Reads a linked folder in place: new songs join the library and the folder's
+ * playlist, changed ones are re-read, missing ones are dropped. Nothing is
+ * copied. Access to the folder must already be granted. With `quiet`, nothing
+ * is shown unless the folder changed.
+ */
+export function scanFolder(folderId: string, quiet = false): void {
+  if (useImport.getState().running) return;
+  void db.folders.get(folderId).then((folder) => {
+    if (!folder) return;
+    runWorker(
+      { folder: { id: folder.id, handle: folder.handle } },
+      `Reading “${folder.name}”`,
+      async (message) => {
+        await syncFolderPlaylist(folder.id, message.addedIds);
+        const current = await db.folders.get(folder.id);
+        const playlistId = current?.playlistId ?? folder.playlistId;
+        const changed =
+          message.added + message.removed + message.failed.length > 0;
+        if (quiet && !changed) return null;
+        const count = await db.playlistItems
+          .where("playlistId")
+          .equals(playlistId)
+          .count();
+        return {
+          added: message.added,
+          skipped: message.skipped,
+          removed: message.removed,
+          failed: message.failed,
+          folder: true,
+          playlist: { id: playlistId, name: folder.name, count },
+        };
       },
-    });
-    worker.terminate();
-  };
-  worker.postMessage({ files });
+    );
+  });
+}
+
+/** Picks a folder to link and reads it. Must run from a tap or click. */
+export async function linkFolder(): Promise<void> {
+  if (useImport.getState().running) return;
+  const folder = await pickFolder();
+  if (folder) scanFolder(folder.id);
 }

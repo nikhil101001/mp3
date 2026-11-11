@@ -9,10 +9,12 @@ import { Icon } from "@/components/icons";
 import { PageHeader } from "@/components/library";
 import { db } from "@/lib/db";
 import { plural } from "@/lib/format";
+import { useCanLinkFolders } from "@/components/linked-folders";
 import {
   audioFilesIn,
   folderNameOf,
   importFiles,
+  linkFolder,
   useImport,
 } from "@/lib/import/client";
 import { createPlaylist, playlistEntries } from "@/lib/playlists";
@@ -73,6 +75,8 @@ export default function PlaylistsPage() {
   const [naming, setNaming] = useState(false);
   /** Songs picked for a new playlist, waiting for it to be named. */
   const [picked, setPicked] = useState<File[] | null>(null);
+  const canLink = useCanLinkFolders();
+  const importing = useImport((state) => state.running);
   const playlists = useLiveQuery(async () => {
     const all = await db.playlists.orderBy("name").toArray();
     return Promise.all(
@@ -113,17 +117,37 @@ export default function PlaylistsPage() {
         <li>
           <FromFilesRow onPicked={setPicked} />
         </li>
-        {/* Folder picking works in desktop browsers, not on phones. */}
-        <li className="hidden md:block">
-          <FromFilesRow
-            folder
-            onPicked={(files) => {
-              const name = folderNameOf(files);
-              if (name) importFiles(files, name);
-              else setPicked(files);
-            }}
-          />
-        </li>
+        {/* Desktop Chrome and Edge link a folder in place; other desktop
+            browsers can still pick a folder, which copies its songs. */}
+        {canLink ? (
+          <li>
+            <button
+              className={`${rowClass} ${importing ? "pointer-events-none opacity-40" : ""}`}
+              onClick={() => void linkFolder()}
+            >
+              <span className="card flex h-14 w-14 shrink-0 items-center justify-center rounded-lg">
+                <Icon name="albums" />
+              </span>
+              <span className="row-line flex h-full flex-1 flex-col justify-center pr-4">
+                <span className="text-[17px]">Link a folder</span>
+                <span className="text-sm text-muted">
+                  Plays songs from the folder in place, without copying
+                </span>
+              </span>
+            </button>
+          </li>
+        ) : (
+          <li className="hidden md:block">
+            <FromFilesRow
+              folder
+              onPicked={(files) => {
+                const name = folderNameOf(files);
+                if (name) importFiles(files, name);
+                else setPicked(files);
+              }}
+            />
+          </li>
+        )}
         {playlists.map(({ playlist, count, artworkId }) => (
           <li key={playlist.id}>
             <Link

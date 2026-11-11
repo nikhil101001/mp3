@@ -9,6 +9,7 @@ import "./motion.css";
 import { Icon, type IconName } from "./icons";
 import { ImportStatus } from "./import-button";
 import { InstallHint } from "./install-hint";
+import { rescanAllowedFolders } from "./linked-folders";
 import { useMiniPlayer } from "./mini-player";
 import { NowPlaying } from "./now-playing";
 import { PlayerBar } from "./player-bar";
@@ -18,9 +19,24 @@ type NavItem = { href: string; label: string; icon: IconName; match: string[] };
 /** The five tabs on phones. Desktop's sidebar adds Settings below them. */
 const TABS: NavItem[] = [
   { href: "/", label: "Songs", icon: "songs", match: ["/"] },
-  { href: "/albums", label: "Albums", icon: "albums", match: ["/albums", "/album"] },
-  { href: "/artists", label: "Artists", icon: "artists", match: ["/artists", "/artist"] },
-  { href: "/playlists", label: "Playlists", icon: "playlists", match: ["/playlists", "/playlist"] },
+  {
+    href: "/albums",
+    label: "Albums",
+    icon: "albums",
+    match: ["/albums", "/album"],
+  },
+  {
+    href: "/artists",
+    label: "Artists",
+    icon: "artists",
+    match: ["/artists", "/artist"],
+  },
+  {
+    href: "/playlists",
+    label: "Playlists",
+    icon: "playlists",
+    match: ["/playlists", "/playlist"],
+  },
   { href: "/search", label: "Search", icon: "search", match: ["/search"] },
 ];
 const SETTINGS: NavItem = {
@@ -44,6 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void restorePlayer();
+    void rescanAllowedFolders();
   }, []);
 
   return (
