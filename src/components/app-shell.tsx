@@ -8,6 +8,7 @@ import "./glass.css";
 import "./motion.css";
 import { Icon, type IconName } from "./icons";
 import { ImportStatus } from "./import-button";
+import { InstallHint } from "./install-hint";
 import { NowPlaying } from "./now-playing";
 import { PlayerBar } from "./player-bar";
 
@@ -83,6 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 md:left-60">
         <div className="chrome-fade absolute inset-x-0 bottom-0 h-40 md:h-28" />
         <div className="relative flex flex-col gap-2 px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] md:px-6 md:pb-4">
+          <InstallHint />
           <ImportStatus />
           <PlayerBar onExpand={() => setExpanded(true)} />
           <nav className="glass pointer-events-auto relative mx-auto flex w-full max-w-md rounded-full p-1 md:hidden">
