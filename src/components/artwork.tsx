@@ -23,9 +23,10 @@ export function Artwork({
         // Covers are local blobs, so the Next image optimizer does not apply.
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          key={url}
           src={url}
           alt=""
-          className="h-full w-full object-cover"
+          className="fade-in h-full w-full object-cover"
           draggable={false}
         />
       ) : (

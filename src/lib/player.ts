@@ -48,6 +48,8 @@ type Prepared = { track: Track; url: string };
 let audio: HTMLAudioElement | null = null;
 let prepared: Prepared | null = null;
 let activeUrl: string | null = null;
+/** Where to start the next loaded track, for resuming after a relaunch. */
+let pendingSeek = 0;
 
 function getAudio(): HTMLAudioElement {
   if (audio) return audio;
@@ -61,6 +63,10 @@ function getAudio(): HTMLAudioElement {
     set({ time: element.currentTime }),
   );
   element.addEventListener("loadedmetadata", () => {
+    if (pendingSeek > 0 && pendingSeek < element.duration - 2) {
+      element.currentTime = pendingSeek;
+    }
+    pendingSeek = 0;
     set({ duration: element.duration });
     syncPosition();
   });
@@ -97,12 +103,13 @@ function release(url: string | null | undefined) {
 }
 
 /** Loads an opened track and starts it. Must stay synchronous. */
-function start(index: number, next: Prepared) {
+function start(index: number, next: Prepared, at = 0) {
   const element = getAudio();
+  pendingSeek = at;
   const previousUrl = activeUrl;
   activeUrl = next.url;
   element.src = next.url;
-  set({ index, track: next.track, time: 0, duration: 0, error: null });
+  set({ index, track: next.track, time: at, duration: 0, error: null });
   updateMetadata(next.track);
   element.play().catch((error: unknown) => {
     // A newer play or pause interrupting this one is expected, not a failure.
@@ -139,7 +146,7 @@ async function prepareNext() {
   }
 }
 
-async function loadAndPlay(index: number) {
+async function loadAndPlay(index: number, at = 0) {
   const trackId = get().queue[index];
   if (!trackId) return;
   try {
@@ -150,7 +157,7 @@ async function loadAndPlay(index: number) {
     } else {
       opened = await openTrack(trackId);
     }
-    start(index, opened);
+    start(index, opened, at);
   } catch (error) {
     set({
       index,
@@ -213,7 +220,9 @@ export function shufflePlay(trackIds: string[]) {
 
 export function togglePlay() {
   const element = getAudio();
-  if (!element.src) return void loadAndPlay(get().index);
+  // Nothing loaded yet: this is the first play after a relaunch, so pick up
+  // where the restored song left off.
+  if (!element.src) return void loadAndPlay(get().index, get().time);
   if (element.paused) void element.play().catch(() => {});
   else element.pause();
 }
@@ -329,6 +338,72 @@ export function resetPlayer() {
     error: null,
   });
   if ("mediaSession" in navigator) navigator.mediaSession.metadata = null;
+}
+
+// --- remembering the queue between launches ---------------------------------
+
+const SAVED_KEY = "mp3-player";
+
+type Saved = Pick<
+  PlayerState,
+  "queue" | "original" | "index" | "time" | "shuffle" | "repeat"
+>;
+
+function save() {
+  const { queue, original, index, time, shuffle, repeat } = get();
+  const saved: Saved = { queue, original, index, time, shuffle, repeat };
+  try {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
+  } catch {
+    // Storage full or blocked: the queue simply won't be restored.
+  }
+}
+
+let restored = false;
+
+/**
+ * Call once when the app opens. Brings back the last queue, paused at the
+ * position it was left, and starts saving changes from then on.
+ */
+export async function restorePlayer() {
+  if (restored) return;
+  restored = true;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVED_KEY) ?? "null") as Saved | null;
+    const trackId = saved?.queue?.[saved.index];
+    const track = trackId ? await db.tracks.get(trackId) : undefined;
+    // Only restore if nothing started playing while the library was loading.
+    if (saved && track && !get().track) {
+      set({
+        queue: saved.queue,
+        original: saved.original ?? saved.queue,
+        index: saved.index,
+        track,
+        time: saved.time ?? 0,
+        duration: track.durationMs / 1000,
+        shuffle: Boolean(saved.shuffle),
+        repeat: saved.repeat ?? "off",
+      });
+    }
+  } catch {
+    // A corrupt save is ignored; the player starts empty.
+  }
+
+  // Save on every queue or mode change, and the position every few seconds.
+  let lastTimeSave = 0;
+  usePlayer.subscribe((state, previous) => {
+    const structural =
+      state.queue !== previous.queue ||
+      state.index !== previous.index ||
+      state.shuffle !== previous.shuffle ||
+      state.repeat !== previous.repeat ||
+      state.playing !== previous.playing;
+    if (structural || Math.abs(state.time - lastTimeSave) >= 5) {
+      lastTimeSave = state.time;
+      save();
+    }
+  });
+  window.addEventListener("pagehide", save);
 }
 
 // --- Media Session (lock screen, Control Center) ----------------------------

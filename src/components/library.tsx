@@ -83,12 +83,12 @@ export function AlbumGrid({ albums }: { albums: Album[] }) {
         <li key={album.id} className="[content-visibility:auto]">
           <Link
             href={`/album?id=${encodeURIComponent(album.id)}`}
-            className="group block"
+            className="press group block"
           >
             <Artwork
               id={album.artworkId}
               rounded="rounded-xl"
-              className="w-full shadow-lg shadow-black/40 transition-transform group-active:scale-[0.97]"
+              className="w-full shadow-lg shadow-black/40"
             />
             <p className="mt-2 truncate text-[15px] leading-snug">{album.title}</p>
             <p className="truncate text-sm text-muted">{album.artist}</p>

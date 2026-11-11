@@ -1,0 +1,124 @@
+/*
+ * Motion. One easing curve everywhere (quick start, long soft landing) so the
+ * app moves as one piece. Entrance animations use fill-mode "backwards" so no
+ * transform is left behind once they finish; a leftover transform would trap
+ * fixed-position sheets inside the page.
+ */
+
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.97);
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.3s ease-out backwards;
+}
+.page-in {
+  animation: page-in 0.38s var(--ease-out) backwards;
+}
+.sheet-in {
+  animation: sheet-in 0.36s var(--ease-sheet) backwards;
+}
+.rise-in {
+  animation: rise-in 0.45s var(--ease-out) backwards;
+}
+.pop-in {
+  animation: pop-in 0.45s var(--ease-out) backwards;
+}
+
+/* Bars that bounce on the song that is playing. */
+.eq {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  height: 14px;
+}
+.eq > span {
+  width: 3px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: bottom;
+  animation: eq 0.9s ease-in-out infinite;
+}
+.eq > span:nth-child(2) {
+  animation-delay: -0.3s;
+  animation-duration: 0.7s;
+}
+.eq > span:nth-child(3) {
+  animation-delay: -0.55s;
+  animation-duration: 1.1s;
+}
+.eq[data-paused="true"] > span {
+  animation-play-state: paused;
+}
+
+/* Springy press feedback for anything tappable that opts in. */
+.press {
+  transition:
+    transform 0.2s var(--ease-out),
+    opacity 0.2s ease-out;
+}
+.press:active {
+  transform: scale(0.96);
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .page-in,
+  .sheet-in,
+  .rise-in,
+  .pop-in,
+  .eq > span {
+    animation: none;
+  }
+  .eq > span {
+    transform: scaleY(0.7);
+  }
+  .press,
+  .press:active {
+    transition: none;
+    transform: none;
+  }
+}

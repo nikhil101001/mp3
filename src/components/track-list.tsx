@@ -5,11 +5,23 @@ import { useRef, useState, type ReactNode } from "react";
 import type { Track } from "@/lib/db";
 import { formatTime } from "@/lib/format";
 import { addToQueue, playNext, playTracks, usePlayer } from "@/lib/player";
-import { ActionSheet } from "./action-sheet";
+import { ActionSheet, type SheetAction } from "./action-sheet";
+import { AddToPlaylist } from "./add-to-playlist";
 import { Artwork } from "./artwork";
 import { Icon } from "./icons";
 
 const ROW_HEIGHT = 58;
+
+/** Bouncing bars that mark the song that is playing. */
+function Equalizer({ paused }: { paused: boolean }) {
+  return (
+    <span className="eq" data-paused={paused} aria-label="Playing">
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
 
 /**
  * A scrolling list of tracks that only renders the rows on screen, so a
@@ -20,15 +32,20 @@ export function TrackList({
   tracks,
   header,
   variant = "songs",
+  extraActions,
 }: {
   tracks: Track[];
   header?: ReactNode;
   /** "album" shows track numbers in place of covers. */
   variant?: "songs" | "album";
+  /** More menu entries for a row, such as removing it from a playlist. */
+  extraActions?: (track: Track) => SheetAction[];
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentId = usePlayer((state) => state.track?.id);
+  const playing = usePlayer((state) => state.playing);
   const [menuFor, setMenuFor] = useState<Track | null>(null);
+  const [addingToPlaylist, setAddingToPlaylist] = useState<Track | null>(null);
   const offset = header ? 1 : 0;
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -79,17 +96,32 @@ export function TrackList({
                 className={`absolute bottom-0 right-0 h-px bg-white/[0.08] ${variant === "album" ? "left-14 md:left-16" : "left-[4.5rem] md:left-[5rem]"}`}
               />
               <button
-                className="flex h-full min-w-0 flex-1 items-center gap-3 text-left active:opacity-60"
+                className="press flex h-full min-w-0 flex-1 items-center gap-3 text-left"
                 onClick={() => playTracks(ids(), index)}
               >
                 {variant === "album" ? (
                   <span
                     className={`w-7 shrink-0 text-center text-[15px] tabular-nums ${active ? "text-accent" : "text-muted"}`}
                   >
-                    {track.trackNo || index + 1}
+                    {active ? (
+                      <Equalizer paused={!playing} />
+                    ) : (
+                      track.trackNo || index + 1
+                    )}
                   </span>
                 ) : (
-                  <Artwork id={track.artworkId} className="h-11 w-11" rounded="rounded-[0.45rem]" />
+                  <span className="relative shrink-0">
+                    <Artwork
+                      id={track.artworkId}
+                      className="h-11 w-11"
+                      rounded="rounded-[0.45rem]"
+                    />
+                    {active && (
+                      <span className="fade-in absolute inset-0 flex items-center justify-center rounded-[0.45rem] bg-black/55 text-white">
+                        <Equalizer paused={!playing} />
+                      </span>
+                    )}
+                  </span>
                 )}
                 <span className="min-w-0 flex-1">
                   <span
@@ -127,7 +159,18 @@ export function TrackList({
           actions={[
             { label: "Play next", onSelect: () => playNext(menuFor.id) },
             { label: "Add to queue", onSelect: () => addToQueue(menuFor.id) },
+            {
+              label: "Add to playlist…",
+              onSelect: () => setAddingToPlaylist(menuFor),
+            },
+            ...(extraActions?.(menuFor) ?? []),
           ]}
+        />
+      )}
+      {addingToPlaylist && (
+        <AddToPlaylist
+          track={addingToPlaylist}
+          onClose={() => setAddingToPlaylist(null)}
         />
       )}
     </div>

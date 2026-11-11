@@ -44,6 +44,25 @@ const STROKED: Record<string, ReactNode> = {
     <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  playlists: (
+    <>
+      <path d="M3 6h12M3 12h9M3 18h6M17 18V8l4-1" />
+      <circle cx="15" cy="18" r="2.5" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.6-3.6" />
+    </>
+  ),
+  grip: <path d="M4 9h16M4 15h16" />,
+  minus: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12h8" />
+    </>
+  ),
   close: <path d="M18 6 6 18M6 6l12 12" />,
 };
 
@@ -62,6 +81,10 @@ export type IconName =
   | "artists"
   | "settings"
   | "plus"
+  | "playlists"
+  | "search"
+  | "grip"
+  | "minus"
   | "close";
 
 export function Icon({
