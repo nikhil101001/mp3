@@ -1,0 +1,79 @@
+/*
+ * Glass materials. Each one blurs and saturates whatever scrolls behind it,
+ * then adds a bright top edge and a soft sheen so it reads as a lit pane of
+ * glass and not a flat grey panel.
+ */
+
+.glass {
+  position: relative;
+  background: rgb(44 44 48 / 0.55);
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  backdrop-filter: blur(30px) saturate(190%);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 -1px 0 rgb(0 0 0 / 0.25),
+    0 12px 32px rgb(0 0 0 / 0.4);
+}
+
+/* The sheen: light catching the upper half of the pane. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.1),
+    rgb(255 255 255 / 0.02) 45%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* A lighter pane for controls that sit on top of artwork or other glass. */
+.glass-thin {
+  background: rgb(255 255 255 / 0.1);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2);
+}
+
+/* Flat grouped card, for settings and lists that are not floating. */
+.card {
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.06);
+}
+
+/* Room at the end of every scrolling page so the last rows clear the
+   floating player and tab bar. */
+.chrome-space {
+  height: calc(env(safe-area-inset-bottom) + 10rem);
+}
+@media (min-width: 768px) {
+  .chrome-space {
+    height: 7.5rem;
+  }
+}
+
+/* Fades page content out behind the floating bars so text stays readable. */
+.chrome-fade {
+  background: linear-gradient(
+    to top,
+    var(--background) 10%,
+    rgb(0 0 0 / 0.6) 55%,
+    transparent
+  );
+}
+
+/* Hairline between list rows, starting where the text starts. */
+.row-line {
+  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.07);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe-only {
+    transition: none !important;
+  }
+}

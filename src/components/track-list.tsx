@@ -9,7 +9,7 @@ import { ActionSheet } from "./action-sheet";
 import { Artwork } from "./artwork";
 import { Icon } from "./icons";
 
-const ROW_HEIGHT = 60;
+const ROW_HEIGHT = 58;
 
 /**
  * A scrolling list of tracks that only renders the rows on screen, so a
@@ -70,25 +70,30 @@ export function TrackList({
           return (
             <div
               key={track.id}
-              className="absolute left-0 top-0 flex w-full items-center px-2 md:px-4"
+              className="absolute left-0 top-0 flex w-full items-center pl-4 pr-1 md:pl-6 md:pr-3"
               style={{ ...style, height: ROW_HEIGHT }}
             >
+              {/* Hairline under the row, starting where the text starts. */}
+              <span
+                aria-hidden="true"
+                className={`absolute bottom-0 right-0 h-px bg-white/[0.08] ${variant === "album" ? "left-14 md:left-16" : "left-[4.5rem] md:left-[5rem]"}`}
+              />
               <button
-                className="flex h-14 min-w-0 flex-1 items-center gap-3 rounded-lg px-2 text-left hover:bg-surface active:bg-surface"
+                className="flex h-full min-w-0 flex-1 items-center gap-3 text-left active:opacity-60"
                 onClick={() => playTracks(ids(), index)}
               >
                 {variant === "album" ? (
                   <span
-                    className={`w-7 shrink-0 text-center font-mono text-sm ${active ? "text-accent" : "text-muted"}`}
+                    className={`w-7 shrink-0 text-center text-[15px] tabular-nums ${active ? "text-accent" : "text-muted"}`}
                   >
                     {track.trackNo || index + 1}
                   </span>
                 ) : (
-                  <Artwork id={track.artworkId} className="h-11 w-11" />
+                  <Artwork id={track.artworkId} className="h-11 w-11" rounded="rounded-[0.45rem]" />
                 )}
                 <span className="min-w-0 flex-1">
                   <span
-                    className={`block truncate ${active ? "text-accent" : ""}`}
+                    className={`block truncate text-[16px] leading-snug ${active ? "text-accent" : ""}`}
                   >
                     {track.title}
                   </span>
@@ -98,13 +103,13 @@ export function TrackList({
                       : `${track.artist} · ${track.album}`}
                   </span>
                 </span>
-                <span className="shrink-0 font-mono text-xs text-muted">
+                <span className="shrink-0 pl-2 text-xs tabular-nums text-muted">
                   {formatTime(track.durationMs / 1000)}
                 </span>
               </button>
               <button
                 aria-label={`More options for ${track.title}`}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted hover:text-foreground active:bg-surface"
+                className="flex h-full w-11 shrink-0 items-center justify-center text-muted hover:text-foreground"
                 onClick={() => setMenuFor(track)}
               >
                 <Icon name="more" size={20} />
@@ -113,6 +118,7 @@ export function TrackList({
           );
         })}
       </div>
+      <div className="chrome-space" />
       {menuFor && (
         <ActionSheet
           title={menuFor.title}

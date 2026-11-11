@@ -37,23 +37,23 @@ function AlbumView() {
             id={album.artworkId}
             size="large"
             rounded="rounded-2xl"
-            className="w-48 shadow-xl shadow-black/50 md:w-52"
+            className="w-56 shadow-2xl shadow-black/60 md:w-56"
           />
-          <div className="min-w-0">
+          <div className="w-full min-w-0">
             <h1 className="text-2xl font-bold tracking-tight md:text-4xl">
               {album.title}
             </h1>
             <p className="mt-1 text-sm text-muted">
               <Link
                 href={`/artist?id=${encodeURIComponent(album.artistId)}`}
-                className="text-foreground hover:underline"
+                className="text-accent hover:underline"
               >
                 {album.artist}
               </Link>
               {album.year ? ` · ${album.year}` : ""} ·{" "}
               {plural(tracks.length, "song")} · {formatTime(seconds)}
             </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start">
+            <div className="mx-auto mt-4 grid w-full max-w-md grid-cols-2 gap-3 md:mx-0">
               <PlayActions trackIds={tracks.map((track) => track.id)} />
             </div>
           </div>

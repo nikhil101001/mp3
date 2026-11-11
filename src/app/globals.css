@@ -2,11 +2,11 @@
 
 /* Dark by default. A light theme can be added later by overriding these. */
 :root {
-  --background: #0e0e10;
-  --surface: #17171a;
-  --line: #2a2a30;
-  --foreground: #f2f1ee;
-  --muted: #9a9aa3;
+  --background: #000000;
+  --surface: #1c1c1e;
+  --line: #2c2c2e;
+  --foreground: #ffffff;
+  --muted: #98989f;
   --accent: #ff6b4a;
   --good: #6fd08c;
   --bad: #ff7a7a;
@@ -22,13 +22,13 @@
   --color-accent: var(--accent);
   --color-good: var(--good);
   --color-bad: var(--bad);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
 }

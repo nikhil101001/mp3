@@ -26,24 +26,24 @@ export function ActionSheet({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 md:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:items-center"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-sm rounded-t-2xl border border-line bg-surface p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:rounded-2xl"
+        className="glass w-full max-w-sm rounded-3xl p-2"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="px-3 py-2">
+        <div className="relative px-3 py-2">
           <p className="truncate font-medium">{title}</p>
-          {subtitle && <p className="truncate text-sm text-muted">{subtitle}</p>}
+          {subtitle && <p className="truncate text-sm text-white/60">{subtitle}</p>}
         </div>
         {actions.map((action) => (
           <button
             key={action.label}
-            className="flex min-h-12 w-full items-center rounded-lg px-3 text-left hover:bg-line active:bg-line"
+            className="relative flex min-h-12 w-full items-center rounded-2xl px-3 text-left hover:bg-white/10 active:bg-white/10"
             onClick={() => {
               action.onSelect();
               onClose();
@@ -53,7 +53,7 @@ export function ActionSheet({
           </button>
         ))}
         <button
-          className="mt-1 flex min-h-12 w-full items-center justify-center rounded-lg text-muted hover:bg-line active:bg-line"
+          className="relative mt-1 flex min-h-12 w-full items-center justify-center rounded-2xl font-semibold text-accent hover:bg-white/10 active:bg-white/10"
           onClick={onClose}
         >
           Cancel

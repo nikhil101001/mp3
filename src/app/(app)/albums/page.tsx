@@ -10,9 +10,10 @@ export default function AlbumsPage() {
   if (!albums) return null;
   if (albums.length === 0) return <EmptyLibrary />;
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <PageHeader title="Albums" subtitle={plural(albums.length, "album")} />
       <AlbumGrid albums={albums} />
+      <div className="chrome-space" />
     </div>
   );
 }

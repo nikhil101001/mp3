@@ -31,7 +31,7 @@ async function readStorage(): Promise<Storage | null> {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-line bg-surface p-4">
+    <section className="card rounded-2xl p-4">
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
         {title}
       </h2>
@@ -65,7 +65,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <PageHeader title="Settings" />
       <div className="mx-4 flex max-w-xl flex-col gap-4 md:mx-6">
         <Section title="Add music">
@@ -118,7 +118,7 @@ export default function SettingsPage() {
                   Remove everything
                 </button>
                 <button
-                  className="min-h-11 rounded-full border border-line px-5 text-sm font-medium"
+                  className="min-h-11 rounded-full bg-white/10 px-5 text-sm font-medium"
                   onClick={() => setConfirming(false)}
                 >
                   Cancel
@@ -128,7 +128,7 @@ export default function SettingsPage() {
           ) : (
             <button
               disabled={!songCount || importing}
-              className="min-h-11 rounded-full border border-line px-5 text-sm font-medium disabled:opacity-40"
+              className="min-h-11 rounded-full bg-white/10 px-5 text-sm font-medium text-bad disabled:opacity-40"
               onClick={() => setConfirming(true)}
             >
               Remove all music
@@ -142,6 +142,7 @@ export default function SettingsPage() {
           </Link>
         </Section>
       </div>
+      <div className="chrome-space" />
     </div>
   );
 }

@@ -21,7 +21,7 @@ export function ImportButton({
   const running = useImport((state) => state.running);
   const look = primary
     ? "bg-accent text-black font-semibold"
-    : "border border-line font-medium";
+    : "card font-medium text-accent";
   return (
     <label
       className={`inline-flex min-h-11 cursor-pointer items-center rounded-full px-5 text-sm active:opacity-80 ${look} ${running ? "pointer-events-none opacity-50" : ""}`}
@@ -45,14 +45,14 @@ export function ImportStatus() {
   const { running, done, total, current, result } = useImport();
   if (running) {
     return (
-      <div className="border-t border-line bg-surface px-4 py-2 text-sm">
+      <div className="glass pointer-events-auto mx-auto w-full max-w-3xl rounded-2xl px-4 py-2.5 text-sm">
         <div className="flex justify-between gap-3">
           <span className="truncate">Importing {current}</span>
-          <span className="shrink-0 font-mono text-xs text-muted">
+          <span className="shrink-0 text-xs tabular-nums text-white/60">
             {done + 1} / {total}
           </span>
         </div>
-        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-line">
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/15">
           <div
             className="h-full bg-accent transition-[width]"
             style={{ width: `${(done / Math.max(total, 1)) * 100}%` }}
@@ -68,7 +68,7 @@ export function ImportStatus() {
     result.failed.length > 0 ? `${result.failed.length} failed` : "",
   ].filter(Boolean);
   return (
-    <div className="flex items-start justify-between gap-3 border-t border-line bg-surface px-4 py-2 text-sm">
+    <div className="glass pointer-events-auto mx-auto flex w-full max-w-3xl items-start justify-between gap-3 rounded-2xl px-4 py-2.5 text-sm">
       <div className="min-w-0">
         <p>{parts.join(" · ")}</p>
         {result.failed.slice(0, 3).map((line) => (
@@ -78,7 +78,7 @@ export function ImportStatus() {
         ))}
       </div>
       <button
-        className="shrink-0 text-muted hover:text-foreground"
+        className="relative shrink-0 font-medium text-accent"
         onClick={() => useImport.setState({ result: null })}
       >
         Dismiss

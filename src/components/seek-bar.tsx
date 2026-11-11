@@ -24,9 +24,9 @@ export function SeekBar({ showTimes = true }: { showTimes?: boolean }) {
         onChange={(event) => seek(Number(event.target.value))}
       />
       {showTimes && (
-        <div className="mt-1 flex justify-between font-mono text-[11px] text-muted">
+        <div className="flex justify-between text-xs font-medium tabular-nums text-white/55">
           <span>{formatTime(time)}</span>
-          <span>{formatTime(duration)}</span>
+          <span>-{formatTime(Math.max(0, duration - time))}</span>
         </div>
       )}
     </div>
