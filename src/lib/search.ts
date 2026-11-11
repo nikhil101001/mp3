@@ -1,7 +1,11 @@
 import { create } from "zustand";
 
 /** The search text, kept outside the page so it survives opening a result. */
-export const useSearch = create<{ query: string }>(() => ({ query: "" }));
+export const useSearch = create<{
+  query: string;
+  /** Where to look: your own library, or the Audius catalogue. */
+  scope: "library" | "audius";
+}>(() => ({ query: "", scope: "library" }));
 
 /** Lower-cases and strips accents, so "beyonce" finds "Beyoncé". */
 export function fold(text: string): string {

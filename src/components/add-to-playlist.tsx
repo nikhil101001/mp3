@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { db, type Track } from "@/lib/db";
 import { addToPlaylist, createPlaylist } from "@/lib/playlists";
+import { saveToLibrary } from "@/lib/remote-library";
 import {
   NameSheet,
   Sheet,
@@ -31,6 +32,9 @@ export function AddToPlaylist({
         confirmLabel="Create and add"
         onClose={onClose}
         onSubmit={async (name) => {
+          // A streamed song is saved to the library first, so the playlist
+          // can find it again later.
+          await saveToLibrary(track);
           const playlist = await createPlaylist(name);
           await addToPlaylist(playlist.id, track.id);
         }}
@@ -50,6 +54,7 @@ export function AddToPlaylist({
           key={playlist.id}
           className={sheetRow}
           onClick={async () => {
+            await saveToLibrary(track);
             await addToPlaylist(playlist.id, track.id);
             onClose();
           }}

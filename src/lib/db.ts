@@ -17,8 +17,11 @@ export interface Track {
   durationMs: number;
   year?: number;
   genre?: string;
+  /** Id of a stored cover, or a web address for streamed tracks. */
   artworkId?: string;
   addedAt: number;
+  /** Set for tracks streamed from an online source and not stored here. */
+  remote?: { source: "audius"; id: string; permalink?: string };
 }
 
 /** One playable file for a track. A track can gain more renditions later. */

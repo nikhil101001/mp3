@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useArtworkUrl, type ArtworkSize } from "@/lib/artwork";
 import { Icon } from "./icons";
 
@@ -15,12 +16,16 @@ export function Artwork({
   rounded?: string;
 }) {
   const url = useArtworkUrl(id, size);
+  // Streamed covers come from the web and can fail; fall back to the icon.
+  const [failedUrl, setFailedUrl] = useState<string>();
+  const show = url && url !== failedUrl;
   return (
     <div
       className={`relative aspect-square shrink-0 overflow-hidden bg-line ${rounded} ${className}`}
     >
-      {url ? (
-        // Covers are local blobs, so the Next image optimizer does not apply.
+      {show ? (
+        // Covers are local blobs or remote files, so the Next image optimizer
+        // does not apply.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           key={url}
@@ -28,6 +33,7 @@ export function Artwork({
           alt=""
           className="fade-in h-full w-full object-cover"
           draggable={false}
+          onError={() => setFailedUrl(url)}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-muted">

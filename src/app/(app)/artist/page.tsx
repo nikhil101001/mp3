@@ -39,14 +39,23 @@ function ArtistView() {
         <div className="pb-2">
           <PageHeader
             title={artist.name}
-            subtitle={`${plural(albums.length, "album")} · ${plural(tracks.length, "song")}`}
+            subtitle={[
+              albums.length > 0 ? plural(albums.length, "album") : "",
+              plural(tracks.length, "song"),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           >
             <PlayActions trackIds={tracks.map((track) => track.id)} />
           </PageHeader>
-          <h2 className="px-4 pb-3 pt-2 text-sm font-semibold uppercase tracking-widest text-muted md:px-6">
-            Albums
-          </h2>
-          <AlbumGrid albums={albums} />
+          {albums.length > 0 && (
+            <>
+              <h2 className="px-4 pb-3 pt-2 text-sm font-semibold uppercase tracking-widest text-muted md:px-6">
+                Albums
+              </h2>
+              <AlbumGrid albums={albums} />
+            </>
+          )}
           <h2 className="px-4 pb-1 pt-6 text-sm font-semibold uppercase tracking-widest text-muted md:px-6">
             Songs
           </h2>

@@ -10,11 +10,17 @@ const pending = new Map<string, Promise<string | undefined>>();
 
 const keyFor = (id: string, size: ArtworkSize) => `${size}:${id}`;
 
+/** Streamed tracks carry their cover as a web address; use it directly. */
+function webCover(id: string, size: ArtworkSize): string | undefined {
+  if (!id.startsWith("http")) return undefined;
+  return size === "large" ? id.replace("480x480", "1000x1000") : id;
+}
+
 export function peekArtworkUrl(
   id: string | undefined,
   size: ArtworkSize,
 ): string | undefined {
-  return id ? cache.get(keyFor(id, size)) : undefined;
+  return id ? (webCover(id, size) ?? cache.get(keyFor(id, size))) : undefined;
 }
 
 export function loadArtworkUrl(
@@ -22,6 +28,8 @@ export function loadArtworkUrl(
   size: ArtworkSize,
 ): Promise<string | undefined> {
   if (!id) return Promise.resolve(undefined);
+  const web = webCover(id, size);
+  if (web) return Promise.resolve(web);
   const key = keyFor(id, size);
   const cached = cache.get(key);
   if (cached) return Promise.resolve(cached);

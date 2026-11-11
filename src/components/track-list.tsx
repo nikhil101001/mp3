@@ -1,10 +1,18 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useLiveQuery } from "dexie-react-hooks";
 import { useRef, useState, type ReactNode } from "react";
-import type { Track } from "@/lib/db";
+import { db, type Track } from "@/lib/db";
 import { formatTime } from "@/lib/format";
-import { addToQueue, playNext, playTracks, usePlayer } from "@/lib/player";
+import {
+  addToQueue,
+  playNext,
+  playTracks,
+  registerTracks,
+  usePlayer,
+} from "@/lib/player";
+import { removeFromLibrary, saveToLibrary } from "@/lib/remote-library";
 import { ActionSheet, type SheetAction } from "./action-sheet";
 import { AddToPlaylist } from "./add-to-playlist";
 import { Artwork } from "./artwork";
@@ -58,6 +66,38 @@ export function TrackList({
 
   const ids = () => tracks.map((track) => track.id);
 
+  // Which streamed tracks are already saved, to offer the right menu entry.
+  const hasStreamed = tracks.some((track) => track.remote);
+  const savedIds = useLiveQuery(
+    async () =>
+      hasStreamed
+        ? new Set(await db.tracks.where("id").startsWith("audius:").primaryKeys())
+        : new Set<string>(),
+    [hasStreamed],
+  );
+
+  function streamedActions(track: Track): SheetAction[] {
+    if (!track.remote) return [];
+    const saved = savedIds?.has(track.id);
+    const actions: SheetAction[] = [
+      saved
+        ? {
+            label: "Remove from library",
+            destructive: true,
+            onSelect: () => void removeFromLibrary(track.id),
+          }
+        : { label: "Add to library", onSelect: () => void saveToLibrary(track) },
+    ];
+    const { permalink } = track.remote;
+    if (permalink) {
+      actions.push({
+        label: "Open on Audius",
+        onSelect: () => window.open(permalink, "_blank", "noopener"),
+      });
+    }
+    return actions;
+  }
+
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <div
@@ -97,7 +137,10 @@ export function TrackList({
               />
               <button
                 className="press flex h-full min-w-0 flex-1 items-center gap-3 text-left"
-                onClick={() => playTracks(ids(), index)}
+                onClick={() => {
+                  registerTracks(tracks);
+                  playTracks(ids(), index);
+                }}
               >
                 {variant === "album" ? (
                   <span
@@ -157,12 +200,25 @@ export function TrackList({
           subtitle={menuFor.artist}
           onClose={() => setMenuFor(null)}
           actions={[
-            { label: "Play next", onSelect: () => playNext(menuFor.id) },
-            { label: "Add to queue", onSelect: () => addToQueue(menuFor.id) },
+            {
+              label: "Play next",
+              onSelect: () => {
+                registerTracks([menuFor]);
+                playNext(menuFor.id);
+              },
+            },
+            {
+              label: "Add to queue",
+              onSelect: () => {
+                registerTracks([menuFor]);
+                addToQueue(menuFor.id);
+              },
+            },
             {
               label: "Add to playlist…",
               onSelect: () => setAddingToPlaylist(menuFor),
             },
+            ...streamedActions(menuFor),
             ...(extraActions?.(menuFor) ?? []),
           ]}
         />

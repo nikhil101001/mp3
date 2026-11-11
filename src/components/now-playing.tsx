@@ -3,9 +3,10 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRef, useState } from "react";
 import { useArtworkUrl } from "@/lib/artwork";
-import { db, type Track } from "@/lib/db";
+import type { Track } from "@/lib/db";
 import {
   jumpTo,
+  lookupTracks,
   next,
   previous,
   removeFromQueue,
@@ -27,7 +28,7 @@ function Queue() {
   // Only what is still to come, capped so a huge queue stays light.
   const upcomingIds = queue.slice(index + 1, index + 101);
   const upcoming = useLiveQuery(
-    () => db.tracks.bulkGet(upcomingIds),
+    () => lookupTracks(upcomingIds),
     [upcomingIds.join(",")],
   );
 

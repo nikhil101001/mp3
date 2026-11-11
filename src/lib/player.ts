@@ -8,6 +8,7 @@
 
 import { create } from "zustand";
 import { loadArtworkUrl, peekArtworkUrl } from "./artwork";
+import { audiusStreamUrl } from "./audius";
 import { db, libraryDir, type Track } from "./db";
 
 export type RepeatMode = "off" | "all" | "one";
@@ -74,7 +75,9 @@ function getAudio(): HTMLAudioElement {
   element.addEventListener("error", () => {
     set({
       playing: false,
-      error: "This file could not be played on this device.",
+      error: get().track?.remote
+        ? "Could not stream this song. Check your connection."
+        : "This file could not be played on this device.",
     });
   });
   audio = element;
@@ -83,9 +86,43 @@ function getAudio(): HTMLAudioElement {
 
 // --- opening tracks ---------------------------------------------------------
 
-async function openTrack(trackId: string): Promise<Prepared> {
-  const track = await db.tracks.get(trackId);
+/** Streamed tracks that are playing or queued but not saved to the library. */
+const transient = new Map<string, Track>();
+
+/** Makes streamed tracks playable before they are queued. */
+export function registerTracks(tracks: Track[]) {
+  for (const track of tracks) {
+    if (track.remote) transient.set(track.id, track);
+  }
+}
+
+/** Looks tracks up in the library or among the streamed ones in the queue. */
+export async function lookupTracks(ids: string[]): Promise<(Track | undefined)[]> {
+  const stored = await db.tracks.bulkGet(ids);
+  return ids.map((id, index) => stored[index] ?? transient.get(id));
+}
+
+/**
+ * Opens a streamed track. When it is being readied as the next song it is
+ * downloaded in full, because a locked iPhone will not fetch it in time.
+ */
+async function openRemote(track: Track, preload: boolean): Promise<Prepared> {
+  const url = audiusStreamUrl(track.remote!.id);
+  if (!preload) return { track, url };
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(String(response.status));
+    return { track, url: URL.createObjectURL(await response.blob()) };
+  } catch {
+    // Fall back to streaming; it still works while the app is on screen.
+    return { track, url };
+  }
+}
+
+async function openTrack(trackId: string, preload = false): Promise<Prepared> {
+  const [track] = await lookupTracks([trackId]);
   if (!track) throw new Error("This song is no longer in the library.");
+  if (track.remote) return openRemote(track, preload);
   const rendition = await db.renditions.where("trackId").equals(trackId).first();
   if (!rendition) throw new Error("This song has no playable file.");
   const dir = await libraryDir();
@@ -99,7 +136,7 @@ async function openTrack(trackId: string): Promise<Prepared> {
 }
 
 function release(url: string | null | undefined) {
-  if (url && url !== activeUrl) URL.revokeObjectURL(url);
+  if (url?.startsWith("blob:") && url !== activeUrl) URL.revokeObjectURL(url);
 }
 
 /** Loads an opened track and starts it. Must stay synchronous. */
@@ -117,7 +154,9 @@ function start(index: number, next: Prepared, at = 0) {
       set({ playing: false, error: "Playback could not start." });
     }
   });
-  if (previousUrl && previousUrl !== next.url) URL.revokeObjectURL(previousUrl);
+  if (previousUrl?.startsWith("blob:") && previousUrl !== next.url) {
+    URL.revokeObjectURL(previousUrl);
+  }
   void prepareNext();
 }
 
@@ -136,7 +175,7 @@ async function prepareNext() {
   if (nextIndex < 0) return;
   const trackId = get().queue[nextIndex];
   try {
-    const opened = await openTrack(trackId);
+    const opened = await openTrack(trackId, true);
     // The queue may have changed while the file was being opened.
     const stillNext = get().queue[upcomingIndex()] === trackId;
     if (!stillNext || prepared) return release(opened.url);
@@ -325,8 +364,9 @@ export function resetPlayer() {
   }
   release(prepared?.url);
   prepared = null;
-  if (activeUrl) URL.revokeObjectURL(activeUrl);
+  if (activeUrl?.startsWith("blob:")) URL.revokeObjectURL(activeUrl);
   activeUrl = null;
+  transient.clear();
   set({
     queue: [],
     original: [],
@@ -347,11 +387,23 @@ const SAVED_KEY = "mp3-player";
 type Saved = Pick<
   PlayerState,
   "queue" | "original" | "index" | "time" | "shuffle" | "repeat"
->;
+> & {
+  /** Streamed tracks in the queue, which the library cannot bring back. */
+  streamed?: Track[];
+};
 
 function save() {
   const { queue, original, index, time, shuffle, repeat } = get();
-  const saved: Saved = { queue, original, index, time, shuffle, repeat };
+  const streamed = queue.flatMap((id) => transient.get(id) ?? []).slice(0, 300);
+  const saved: Saved = {
+    queue,
+    original,
+    index,
+    time,
+    shuffle,
+    repeat,
+    streamed,
+  };
   try {
     localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
   } catch {
@@ -370,8 +422,9 @@ export async function restorePlayer() {
   restored = true;
   try {
     const saved = JSON.parse(localStorage.getItem(SAVED_KEY) ?? "null") as Saved | null;
+    registerTracks(saved?.streamed ?? []);
     const trackId = saved?.queue?.[saved.index];
-    const track = trackId ? await db.tracks.get(trackId) : undefined;
+    const [track] = trackId ? await lookupTracks([trackId]) : [];
     // Only restore if nothing started playing while the library was loading.
     if (saved && track && !get().track) {
       set({
